@@ -35,28 +35,26 @@ Cards inside the sheet use the same `MochiListDefaults.colors()` as other groupe
 | color | Sheet color, `MochiDefaults.sheetBackground()` by default: the elevated grouped background (iOS `systemGroupedBackground` at the elevated level). Inside the sheet `LocalMochiElevated` is true, so `MochiListCard` uses the elevated card color and stays one step apart from the sheet in light and dark |
 | grabber | The small bar at the top |
 | hideNavigationBar | Hide system navigation icons while floating, true by default; the bar background remains transparent independently of this setting |
-| navigator | The same navigator used by the internal `MochiNavHost`; internal pages handle Back first |
+| backStack | The same back stack (Navigation 3 `NavBackStack`) used by the internal `MochiNavHost`; internal pages handle Back first |
 
 ## Navigation inside a sheet
 
 The demo is in the Navigation category. It includes Join Network → Advanced → IP Settings, plus a Security page.
 
 ```kotlin
-val nav = rememberMochiNavigator("network")
-MochiSheet(sheet, navigator = nav) {
+val stack = rememberNavBackStack(SheetRoot)
+MochiSheet(sheet, backStack = stack) {
     MochiNavHost(
-        nav,
+        backStack = stack,
         // Leave corners unset to inherit the sheet's current transition corners
         spec = MochiNavDefaults.spec(pushBackdrop = MochiDefaults.sheetBackground()),
-    ) { route ->
-        // A page contains MochiSheetHeader and its own content.
-        // Reuse navId="sheet.leading" / "sheet.trailing" on each header's buttons.
-    }
+        entryProvider = entryProvider { entry<SheetRoot> { … } entry<SheetAdvanced> { … } },
+    )
 }
-nav.push("advanced") // no source: side push with shared header buttons
+stack.add(SheetAdvanced) // no source: side push with shared header buttons
 ```
 
-Use a navigator dedicated to the sheet. Passing it to both components prevents the sheet's Back handler from taking an internal return. The last internal page's closing animation also consumes repeated Back events instead of accidentally closing the sheet. At the settled root, Back closes the sheet. In the demo, the root's close/check buttons morph into a back icon and Done capsule on internal pages; their actions return one level. Closing and reopening starts at the root again.
+The sheet and its internal host share one back stack, so the sheet's Back handler never takes an internal return. The last internal page's closing animation also consumes repeated Back events instead of accidentally closing the sheet. At the settled root, Back closes the sheet. In the demo, the root's close/check buttons morph into a back icon and Done capsule on internal pages; their actions return one level. Closing and reopening starts at the root again.
 
 The internal `MochiNavHost` inherits the sheet's current transition corners by default. Floating sheets use four rounded corners. Once full-height bottom fill is active, side pushes keep only the top two corners rounded and both bottom corners at zero, including upward overpull and its spring return. Leave `corners` unset; passing `None` explicitly disables the transition corners. The corner callback is read during drawing, without recomposing the page for each drag frame. At rest, the sheet's outer surface owns the clipping.
 

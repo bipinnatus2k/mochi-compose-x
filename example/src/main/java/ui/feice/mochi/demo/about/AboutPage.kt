@@ -58,7 +58,7 @@ import ui.feice.mochi.demo.common.Tag
 import ui.feice.mochi.demo.common.Tone
 import ui.feice.mochi.demo.common.demoItem
 import ui.feice.mochi.demo.common.tile
-import ui.feice.mochi.demo.routeTitle
+import ui.feice.mochi.demo.keyTitle
 import ui.feice.mochi.list.MochiListDefaults
 import ui.feice.mochi.list.MochiListDisclosure
 import ui.feice.mochi.list.MochiListRow
@@ -116,7 +116,7 @@ internal fun AboutPage(modifier: Modifier = Modifier) {
         MochiLazyCompactTitleScaffold(
             title = "关于",
             modifier = Modifier.ribbonEggEffect(egg),
-            navigationIcon = { MochiBackButton(history = ::routeTitle) },
+            navigationIcon = { MochiBackButton(history = ::keyTitle) },
         ) {
             demoItem {
                 Column(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalAlignment = Alignment.CenterHorizontally) {

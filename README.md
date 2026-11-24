@@ -7,7 +7,7 @@
 <p align="center">
   <a href="https://central.sonatype.com/artifact/io.github.feice11/mochi-compose"><img src="https://img.shields.io/maven-central/v/io.github.feice11/mochi-compose?label=Maven%20Central" alt="Maven Central"></a>
   <a href="https://github.com/feice11/mochi-compose/actions/workflows/build.yml"><img src="https://github.com/feice11/mochi-compose/actions/workflows/build.yml/badge.svg" alt="Build"></a>
-  <img src="https://img.shields.io/badge/minSdk-23-3DDC84?logo=android&logoColor=white" alt="minSdk 23">
+  <img src="https://img.shields.io/badge/minSdk-24-3DDC84?logo=android&logoColor=white" alt="minSdk 24">
   <img src="https://img.shields.io/badge/Kotlin-2.3-7F52FF?logo=kotlin&logoColor=white" alt="Kotlin 2.3">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License"></a>
 </p>
@@ -89,7 +89,7 @@ Guides: [theme and materials](docs/guide/theme.md), [effects](docs/guide/effects
 
 ## Compatibility
 
-Android only, minSdk 23. Effects degrade on older releases instead of failing:
+Android only, minSdk 24. Effects degrade on older releases instead of failing:
 
 | Feature | Full version | Fallback |
 |---|---|---|

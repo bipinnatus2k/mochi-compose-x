@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import ui.feice.mochi.basic.MochiSwitch
 import ui.feice.mochi.demo.DemoStyle
+import ui.feice.mochi.demo.GlassPreset
 import ui.feice.mochi.demo.LocalDemoAppearance
 import ui.feice.mochi.demo.NothingMode
 import ui.feice.mochi.demo.about.AboutButton
@@ -38,7 +39,7 @@ import ui.feice.mochi.effect.mask.mochiScrollEdgeBlur
 import ui.feice.mochi.effect.overscroll.MochiScrollDefaults
 import ui.feice.mochi.list.MochiListDefaults
 import ui.feice.mochi.list.MochiListRow
-import ui.feice.mochi.navigation.MochiNavigator
+import ui.feice.mochi.navigation.LocalMochiNavBackStack
 import ui.feice.mochi.navigation.MochiScrollEdgeDefaults
 import ui.feice.mochi.navigation.MochiTabReselectHandler
 import ui.feice.mochi.navigation.MochiTabScaffoldDefaults
@@ -70,7 +71,7 @@ internal fun ThemeTab(controller: ThemeController, scroll: LazyListState = remem
     val reveal = appearance?.reveal
     val systemDark = isSystemInDarkTheme()
     val nowDark = MochiTheme.colorScheme.isDark
-    val nav = MochiNavigator.current
+    val stack = LocalMochiNavBackStack.current
     val sections = ThemeSection.entries.filter {
         when (it) {
             ThemeSection.Appearance, ThemeSection.Materials, ThemeSection.Onboarding -> appearance != null
@@ -130,7 +131,7 @@ internal fun ThemeTab(controller: ThemeController, scroll: LazyListState = remem
                                     MochiSwitch(settings.glass, { on -> reveal.crossfadeOrChange { settings.glass = on } })
                                 },
                             )
-                            MochiListRow("玻璃样式", chevron = true, onClick = { nav?.push(GlassPresetRoute) })
+                            MochiListRow("玻璃样式", chevron = true, onClick = { stack?.add(GlassPreset) })
                             MochiListRow(
                                 "模糊效果",
                                 subtitle = "顶栏下面的内容模糊",

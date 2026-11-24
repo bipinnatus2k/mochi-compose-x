@@ -9,6 +9,9 @@ import androidx.activity.compose.setContent
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.core.view.WindowCompat
+import androidx.navigation3.runtime.NavBackStack
+import androidx.navigation3.runtime.NavKey
+import androidx.navigation3.runtime.entryProvider
 import androidx.test.ext.junit.rules.ActivityScenarioRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -18,7 +21,6 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import ui.feice.mochi.demo.catalog.catalog
 import ui.feice.mochi.navigation.MochiNavHost
-import ui.feice.mochi.navigation.rememberMochiNavigator
 import ui.feice.mochi.theme.ColorSchemeMode
 import ui.feice.mochi.theme.MochiTheme
 import ui.feice.mochi.theme.ThemeController
@@ -81,21 +83,23 @@ class CatalogGalleryShots {
         return out
     }
 
-    private fun show(route: String, dark: Boolean) {
+    private fun show(id: String, dark: Boolean) {
         rule.scenario.onActivity { activity ->
             WindowCompat.getInsetsController(activity.window, activity.window.decorView).apply {
                 isAppearanceLightStatusBars = !dark
                 isAppearanceLightNavigationBars = !dark
             }
             activity.setContent {
-                key(route, dark) {
+                key(id, dark) {
                     val controller = remember { ThemeController(if (dark) ColorSchemeMode.Dark else ColorSchemeMode.Light) }
                     MochiTheme(controller) {
-                        val nav = rememberMochiNavigator(route)
-                        MochiNavHost(nav) { r ->
-                            val entry = catalog.first { it.id == r }
-                            entry.page(entry)
-                        }
+                        val stack = remember { NavBackStack<NavKey>(CatalogPage(id)) }
+                        MochiNavHost(
+                            backStack = stack,
+                            entryProvider = entryProvider {
+                                entry<CatalogPage> { key -> catalog.first { e -> e.id == key.id }.let { it.page(it) } }
+                            },
+                        )
                     }
                 }
             }

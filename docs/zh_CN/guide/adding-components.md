@@ -55,7 +55,7 @@ API 约定（和 miuix 一致）：
 - 开关、分段选择、参数和版本信息等设置项用 `DemoSettingsSection`，内部复用 `MochiListRow`（`Toggles` / `Param` 在设置作用域内自动使用列表行）。自定义舞台才用 `DemoSection`；不要在设置行外再套通用卡片 padding。公共小件在 `demo/common/`：`Toggles`、`Param`、`Code`、`Glyph`、`Icons`
 - 目录条目要给 `glyph`（24×24 网格的线条图标 path，加在 `Icons` 里）
 - 把目录里对应条目改成 `CatalogStatus.Ready`，并给 `page = { XxxPage(it) }`
-- 页面里返回用 `MochiNavigator.current?.pop()`（`DemoPage` 的返回按钮已经处理）
+- 页面里返回用 `LocalMochiNavBackStack.current?.removeLast()`（`DemoPage` 的返回按钮已经处理）
 
 ## 6. 验证与提交
 

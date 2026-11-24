@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -29,6 +30,9 @@ import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import androidx.navigation3.runtime.NavBackStack
+import androidx.navigation3.runtime.NavKey
+import androidx.navigation3.runtime.entryProvider
 import androidx.test.ext.junit.rules.ActivityScenarioRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -47,10 +51,9 @@ import ui.feice.mochi.basic.Text
 import ui.feice.mochi.effect.glass.mochiBackdropSource
 import ui.feice.mochi.effect.glass.rememberMochiBackdrop
 import ui.feice.mochi.navigation.MochiNavHost
+import ui.feice.mochi.navigation.MochiNavKey
 import ui.feice.mochi.navigation.MochiNavSpec
-import ui.feice.mochi.navigation.MochiNavigator
 import ui.feice.mochi.navigation.mochiNavSource
-import ui.feice.mochi.navigation.rememberMochiNavigator
 import ui.feice.mochi.theme.MochiTheme
 
 @RunWith(AndroidJUnit4::class)
@@ -67,28 +70,33 @@ class NavGlassVisualRegression {
 
     @Test
     fun sourceBackgroundKeepsItsScreenCoordinates() {
-        lateinit var nav: MochiNavigator
+        lateinit var stack: NavBackStack<NavKey>
         lateinit var marker: LayoutCoordinates
         rule.scenario.onActivity { host ->
             activity = host
             host.setContent {
                 MochiTheme {
-                    nav = rememberMochiNavigator("home")
+                    stack = remember { NavBackStack<NavKey>(GlassHome) }
                     val slow = tween<Float>(8000)
-                    MochiNavHost(nav, spec = MochiNavSpec(slow, slow, slow, openMove = slow)) { route ->
-                        Box(Modifier.fillMaxSize().background(Color.White)) {
-                            if (route == "home") {
-                                Box(
-                                    Modifier.align(Alignment.CenterStart).padding(start = 24.dp).size(8.dp, 50.dp)
-                                        .background(Color.Red).onGloballyPositioned { marker = it },
-                                )
-                                Box(
-                                    Modifier.align(Alignment.TopEnd).padding(40.dp).size(80.dp)
-                                        .mochiNavSource("card", 20.dp, Color.White).background(Color.LightGray),
-                                )
+                    MochiNavHost(
+                        backStack = stack,
+                        spec = MochiNavSpec(slow, slow, slow, openMove = slow),
+                        entryProvider = entryProvider {
+                            entry<GlassHome> {
+                                Box(Modifier.fillMaxSize().background(Color.White)) {
+                                    Box(
+                                        Modifier.align(Alignment.CenterStart).padding(start = 24.dp).size(8.dp, 50.dp)
+                                            .background(Color.Red).onGloballyPositioned { marker = it },
+                                    )
+                                    Box(
+                                        Modifier.align(Alignment.TopEnd).padding(40.dp).size(80.dp)
+                                            .mochiNavSource("card", 20.dp, Color.White).background(Color.LightGray),
+                                    )
+                                }
                             }
-                        }
-                    }
+                            entry<GlassDetail> { Box(Modifier.fillMaxSize()) }
+                        },
+                    )
                 }
             }
         }
@@ -100,7 +108,7 @@ class NavGlassVisualRegression {
                     marker.localToWindow(Offset.Zero),
                     marker.localToWindow(Offset(marker.size.width.toFloat(), marker.size.height.toFloat())),
                 )
-            nav.push("detail", from = "card")
+            stack.add(GlassDetail(mochiSource = "card"))
         }
         SystemClock.sleep(1300)
         inst.runOnMainSync {
@@ -118,3 +126,8 @@ class NavGlassVisualRegression {
         inst.runOnMainSync { activity.setContent { } }
     }
 }
+
+/** 本测试专用的 key（和演示 app 的 DemoNav 区分开） */
+private data object GlassHome : NavKey
+
+private data class GlassDetail(override val mochiSource: String? = null) : MochiNavKey

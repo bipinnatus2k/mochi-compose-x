@@ -18,7 +18,7 @@ mochi-compose/        library, published to Maven Central as io.github.feice11 (
     menu/             menu engine shared by dropdown, context menu and popover (internal) / 菜单引擎（内部）
     parts/            drawing parts shared by several controls: thumbs, glyphs (internal) / 共用绘制零件（内部）
   list/               grouped list sections, rows, swipe rows, index bar / 分组卡片列表
-  navigation/         MochiNavHost, navigator, transitions, predictive back, large titles, tab scaffold / 导航与转场
+  navigation/         MochiNavHost（Navigation 3 渲染壳）, 转场引擎与编排, 预测性返回, 大标题, 标签脚手架 / 导航与转场
   picker/             wheels, time / date pickers, calendar, color picker / 滚筒、日期、取色
   effect/             public effects, one package per effect / 通用效果，一个效果一个包
     content/          content transitions: blur swap, counters, morphing icons / 内容变换

@@ -62,7 +62,7 @@ Top bars (large-title pages, sheet headers) take only these. They share one heig
 - `MochiBarGroup(navId = "app.primary") { MochiBarGroupItem(onClick, navId = "app.primary", contentKey = "edit") { Icon } … }`: several icon buttons sharing one capsule (the iOS 26 toolbar group); pressing any item lights and flexes the whole capsule. For the item that opens a menu use `MochiBarGroupDropdownItem(expanded, onExpandedChange, items, onItemClick) { Icon }`, used like `MochiIconDropdown`; pressing it dims its icon (see [Dropdown](dropdown.md)). A solid-color group opens its menu from the whole capsule with a metaball neck, like a glass group, rather than from the single item
 - `MochiBarIconDropdown(expanded, onExpandedChange, items, onItemClick) { Icon }`: a single round button that opens a menu ("⋯"), 44dp, same size and material as `MochiBarIconButton`. Use it for a lone button instead of a `MochiBarGroup` with one item (the group's end padding makes it an oval)
 - Applicable push pages must register stable `navId` values by default so toolbars stay in place and morph; use stable icon `contentKey` values and register group contents too. `MochiBackButton` registers automatically. See [Navigation → Shared toolbar](../guide/navigation.md#shared-toolbar)
-- `MochiBackButton()` (navigation package): a round back button that pops MochiNavigator by default
+- `MochiBackButton()` (navigation package): a round back button that pops the enclosing back stack by default
 
 Colors come from `MochiButtonDefaults.barColors()`. The bar's side padding is `MochiButtonDefaults.BarHorizontalPadding` (16dp), so the buttons' outer edges line up with the cards below.
 

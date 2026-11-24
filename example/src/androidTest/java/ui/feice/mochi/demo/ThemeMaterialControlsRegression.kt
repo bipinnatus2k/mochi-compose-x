@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
@@ -24,6 +25,9 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import androidx.navigation3.runtime.NavBackStack
+import androidx.navigation3.runtime.NavKey
+import androidx.navigation3.runtime.entryProvider
 import androidx.test.ext.junit.rules.ActivityScenarioRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -36,12 +40,11 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import ui.feice.mochi.navigation.LocalMochiPredictiveBack
 import ui.feice.mochi.navigation.MochiNavHost
+import ui.feice.mochi.navigation.MochiNavKey
 import ui.feice.mochi.navigation.MochiNavSpec
-import ui.feice.mochi.navigation.MochiNavigator
 import ui.feice.mochi.navigation.mochiHideWhenCovered
 import ui.feice.mochi.navigation.mochiNavOccluder
 import ui.feice.mochi.navigation.mochiNavSource
-import ui.feice.mochi.navigation.rememberMochiNavigator
 import ui.feice.mochi.theme.MochiTheme
 
 /** Functional compositing and back-routing checks, not a performance benchmark. */
@@ -51,7 +54,7 @@ class ThemeMaterialControlsRegression {
     val rule = ActivityScenarioRule(MainActivity::class.java)
     private val inst = InstrumentationRegistry.getInstrumentation()
     private lateinit var hostActivity: MainActivity
-    private lateinit var nav: MochiNavigator
+    private lateinit var stack: NavBackStack<NavKey>
     private var sample = Offset.Zero
 
     private fun screenshot(name: String): Bitmap {
@@ -67,11 +70,11 @@ class ThemeMaterialControlsRegression {
             activity.setContent {
                 MochiTheme {
                     val density = LocalDensity.current
-                    nav = rememberMochiNavigator("home")
+                    stack = remember { NavBackStack<NavKey>(ShadowHome) }
                     // Freeze near the initial geometry, isolating duplicate alpha from motion.
                     val slow = tween<Float>(120000, easing = LinearEasing)
                     MochiNavHost(
-                        nav,
+                        backStack = stack,
                         spec = MochiNavSpec(
                             open = slow,
                             close = slow,
@@ -80,30 +83,32 @@ class ThemeMaterialControlsRegression {
                             push = slow,
                             scrim = Color.Transparent,
                         ),
-                    ) { route ->
-                        Box(Modifier.fillMaxSize().background(Color.White)) {
-                            if (route == "home") {
-                                Box(Modifier.padding(40.dp).size(80.dp).mochiNavSource("card", 20.dp, Color.White))
-                                Box(
-                                    Modifier.align(Alignment.BottomCenter).padding(bottom = 80.dp)
-                                        .size(220.dp, 60.dp).mochiHideWhenCovered().mochiNavOccluder()
-                                        .onGloballyPositioned {
-                                            sample =
-                                                it.positionInWindow() +
-                                                Offset(it.size.width / 2f, it.size.height + with(density) { 6.dp.toPx() })
-                                        }
-                                        .drawBehind {
-                                            drawRect(
-                                                Color.Black.copy(alpha = 0.2f),
-                                                Offset(0f, size.height),
-                                                Size(size.width, 12.dp.toPx()),
-                                            )
-                                            drawRect(Color.LightGray)
-                                        },
-                                )
+                        entryProvider = entryProvider {
+                            entry<ShadowHome> {
+                                Box(Modifier.fillMaxSize().background(Color.White)) {
+                                    Box(Modifier.padding(40.dp).size(80.dp).mochiNavSource("card", 20.dp, Color.White))
+                                    Box(
+                                        Modifier.align(Alignment.BottomCenter).padding(bottom = 80.dp)
+                                            .size(220.dp, 60.dp).mochiHideWhenCovered().mochiNavOccluder()
+                                            .onGloballyPositioned {
+                                                sample =
+                                                    it.positionInWindow() +
+                                                    Offset(it.size.width / 2f, it.size.height + with(density) { 6.dp.toPx() })
+                                            }
+                                            .drawBehind {
+                                                drawRect(
+                                                    Color.Black.copy(alpha = 0.2f),
+                                                    Offset(0f, size.height),
+                                                    Size(size.width, 12.dp.toPx()),
+                                                )
+                                                drawRect(Color.LightGray)
+                                            },
+                                    )
+                                }
                             }
-                        }
-                    }
+                            entry<ShadowDetail> { Box(Modifier.fillMaxSize().background(Color.White)) }
+                        },
+                    )
                 }
             }
         }
@@ -112,7 +117,7 @@ class ThemeMaterialControlsRegression {
         val before = screenshot(if (source) "source-before" else "push-before")
         val x = sample.x.toInt()
         val y = sample.y.toInt()
-        inst.runOnMainSync { nav.push("detail", from = if (source) "card" else null) }
+        inst.runOnMainSync { stack.add(if (source) ShadowDetail(mochiSource = "card") else ShadowDetail()) }
         SystemClock.sleep(1100)
         val after = screenshot(if (source) "source-during" else "push-during")
         val original = android.graphics.Color.red(before.getPixel(x, y))
@@ -140,23 +145,34 @@ class ThemeMaterialControlsRegression {
             activity.setContent {
                 MochiTheme {
                     CompositionLocalProvider(LocalMochiPredictiveBack provides false) {
-                        nav = rememberMochiNavigator("home")
-                        MochiNavHost(nav) {
-                            inherited = LocalMochiPredictiveBack.current
-                            Box(Modifier.fillMaxSize().background(Color.White))
-                        }
+                        stack = remember { NavBackStack<NavKey>(ShadowHome) }
+                        MochiNavHost(
+                            backStack = stack,
+                            entryProvider = entryProvider {
+                                entry<ShadowHome> {
+                                    inherited = LocalMochiPredictiveBack.current
+                                    Box(Modifier.fillMaxSize().background(Color.White))
+                                }
+                                entry<ShadowDetail> { Box(Modifier.fillMaxSize().background(Color.White)) }
+                            },
+                        )
                     }
                 }
             }
         }
         inst.waitForIdleSync()
         SystemClock.sleep(400)
-        inst.runOnMainSync { nav.push("detail") }
+        inst.runOnMainSync { stack.add(ShadowDetail()) }
         SystemClock.sleep(1100)
         assertFalse(inherited)
-        assertEquals("detail", nav.current)
+        assertEquals(ShadowDetail(), stack.last())
         rule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
         SystemClock.sleep(650)
-        assertEquals("home", nav.current)
+        assertEquals(ShadowHome, stack.last())
     }
 }
+
+/** Test-local keys for the synthetic host, kept apart from the demo's DemoNav model. */
+private data object ShadowHome : NavKey
+
+private data class ShadowDetail(override val mochiSource: String? = null) : MochiNavKey

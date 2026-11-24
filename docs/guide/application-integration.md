@@ -8,14 +8,14 @@ Read it together with the [design principles](design-principles.md) before build
 
 | Scenario | Required capability and integration | Common omission |
 |---|---|---|
-| App root | `MochiTheme` (the outermost theme also keeps status/navigation bar icons in sync with light/dark); `ProvideMochiOverscroll`; `rememberMochiNavigator` + `MochiNavHost` for Mochi page navigation | Swapping buttons while keeping unrelated default UI; hosting navigation outside the theme |
+| App root | `MochiTheme` (the outermost theme also keeps status/navigation bar icons in sync with light/dark); `ProvideMochiOverscroll`; `rememberNavBackStack` + `MochiNavHost` for Mochi page navigation (Navigation 3, type-safe keys) | Swapping buttons while keeping unrelated default UI; hosting navigation outside the theme |
 | Large title, search, refresh | `MochiLargeTitleScaffold`, `MochiSearchBar`, suspend `onRefresh` when needed | Hand-built bars miss collapsing titles/edge effects; nesting another vertical scroller |
 | Body organized by outside-card section headings | E.g. Color settings/Theme palette: `MochiCompactTitleScaffold`, or `MochiTitleBar` with an existing scroller; remove separate body large title/empty space, keep section headings; only standalone bars require content to reserve status + bar height; keep introduction-card headings | Using descriptive text/card presence as criterion; deleting section labels; duplicate insets |
 | Long page (does not fit on one screen) | `MochiLazyLargeTitleScaffold` / `MochiLazyCompactTitleScaffold`, or `LazyColumn` + `MochiTitleBar`; one section per item; sections with many rows use `mochiListSection` (one item per row, still drawn as one card); `rememberSaveable` for editable state inside items; nested scroll areas use `mochiContainedScroll` | `Column` + `verticalScroll` for long pages, missing frames on the main thread; the whole page in one item; `remember` inside items, losing state when scrolled back |
 | Catalog home without these section headings | Keep the large title initially expanded, collapse with upward scrolling, expand at the top and preserve per-tab state | Forced initial collapse; removing the heading; extra blank space |
-| List-to-detail push | `nav.push(route)`; library toolbar controls with stable `navId` on both pages | Buttons look right but slide away with the page |
-| Card-to-page opening | `mochiNavSource` on the whole source card; matching source key in `push(route, from = key)` | Using `from` for every route or the deprecated `mochiSharedElement` |
-| Back | `MochiBackButton` pops the current navigator; outside a `MochiNavHost` or on its first page it forwards to system back (closing a sheet or finishing the Activity); supply route-title `history` when needed | Competing back handlers; recreating back as a plain clickable icon |
+| List-to-detail push | `stack.add(key)`; library toolbar controls with stable `navId` on both pages | Buttons look right but slide away with the page |
+| Card-to-page opening | `mochiNavSource` on the whole source card; the key carries the same source (`mochiSource`) before `stack.add(key)` | Using `from` for every route or the deprecated `mochiSharedElement` |
+| Back | `MochiBackButton` pops the enclosing stack; outside a `MochiNavHost` or on its first page it forwards to system back (closing a sheet or finishing the Activity); supply a key-title `history` when needed | Competing back handlers; recreating back as a plain clickable icon |
 | Toolbar groups | Two or more adjacent actions in one bar always go in a `MochiBarGroup`: plain actions use `MochiBarGroupItem`, menu actions use `MochiBarGroupDropdownItem` (the menu grows out of the group capsule); only a single action uses a standalone `MochiBarIconButton` / `MochiBarIconDropdown`; register group shape and individual content | Several standalone circles side by side; registering only the group; prefixing IDs with each route so content never matches |
 | Adjacent buttons in page content | Two or more adjacent buttons go in a `MochiButtonGroup`: the pressed one joins its neighbour with a metaball neck, and glass and solid buttons can be mixed | A `Row` + `spacedBy` of independent buttons that ignore each other when pressed |
 | A page with a WebView | Bar glass never samples the WebView: keep the WebView outside `mochiBackdropSource` and put a page snapshot in the source; `MochiNavHost(windowGlass = false)`, and provide that source as `LocalMochiBackdrop` around menus and sheets (they stay glass) | Putting the WebView in a glass source, which crashes the render thread on Vulkan devices (frosted, liquid glass and glass menus alike) |
@@ -23,7 +23,7 @@ Read it together with the [design principles](design-principles.md) before build
 | A whole region without glass (such as a page with a WebView) | `MochiMaterialsScope(MochiMaterials()) { … }`: swaps the materials for that region only, leaving colors and type alone | Wrapping the region in another `MochiTheme` that resets the whole theme; branching on the glass switch in pages |
 | A lone bar button that opens a menu ("⋯") | `MochiBarIconDropdown`: a 44dp circle with the same material as `MochiBarIconButton`; a search field in the same row uses `MochiGlassSurface`, and both share one solid color when glass is off | A `MochiBarGroup` with one item (an oval); separate heights and fills for a search field and the buttons beside it |
 | Bottom tabs | `MochiTabScaffold` at the root page: per-tab state and position, reselect scrolls to top, content clears the tab bar, hides when a page is pushed; switch tabs in code with `rememberMochiTabScaffoldState().select(i)`. Use `MochiTabBar` + `mochiHideWhenCovered` directly only for special layouts | `when (tab)` page swapping that loses scroll position; hand-written `Spacer(112.dp)`; reselect wired for some tabs only |
-| Multi-page sheet | Separate navigator passed to both `MochiSheet` and its `MochiNavHost`; omit `corners` to inherit sheet transition rounding (square bottom corners at full height), use `MochiSheetHeader` | Closing the sheet before popping children; forcing None and losing side-push rounding; unregistered toolbar |
+| Multi-page sheet | One back stack passed to both `MochiSheet` and its `MochiNavHost`; omit `corners` to inherit sheet transition rounding (square bottom corners at full height), use `MochiSheetHeader` | Closing the sheet before popping children; forcing None and losing side-push rounding; unregistered toolbar |
 | Grouped content | `groupedBackground`, `MochiListSection` / `MochiListCard`; `MochiListRow` for settings and key/value rows (iOS 26 metrics) | Custom colors; a generic padded card plus bare Row bypasses text insets and the row height rule |
 | Status | Unread dots in `titleTrailing`; named states in bottom-right `status` using `MochiListStatusChip` | Putting every state next to the title or displacing dates |
 | Actions and menus | Reuse Mochi buttons, dropdowns and context menus | Background + clickable misses cancellation, slide selection or history |
@@ -139,7 +139,7 @@ It contains imports, Activity, theme/system-bar synchronization, navigation, thr
 
 ### Dependencies and Activity
 
-Add the dependencies from the [README](../../README.md#installation), using a released version (see the Maven Central badge). The library is built with compileSdk 36, minSdk 23, Kotlin 2.3.0 with the Compose compiler plugin, and Java 17.
+Add the dependencies from the [README](../../README.md#installation), using a released version (see the Maven Central badge). The library is built with compileSdk 37, minSdk 24, Kotlin 2.3.0 with the Compose compiler plugin, and Java 17. Its page stack is [Navigation 3](https://developer.android.com/guide/navigation/navigation-3) (`androidx.navigation3`); app keys are type-safe `NavKey` data classes, `@Serializable` when you want process-death restore.
 
 The starter needs these dependencies:
 
@@ -147,8 +147,8 @@ The starter needs these dependencies:
 dependencies {
     implementation("io.github.feice11:mochi-compose:<version>")
     implementation("io.github.feice11:mochi-icons:<version>") // same version as mochi-compose
-    implementation("androidx.activity:activity-compose:1.10.1")
-    implementation("androidx.core:core-ktx:1.15.0")
+    implementation("androidx.activity:activity-compose:1.13.0")
+    implementation("androidx.core:core-ktx:1.17.0")
 }
 ```
 

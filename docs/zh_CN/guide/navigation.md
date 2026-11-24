@@ -1,28 +1,31 @@
 # 导航与页面转场
 
-`ui.feice.mochi.navigation` 提供页面栈、来源容器变形、侧推、共享顶栏与返回手势。开发应用先读 [应用接入规范](application-integration.md)，完整三页代码见 [MochiAppStarter.kt](../../../example/src/main/java/ui/feice/mochi/starter/MochiAppStarter.kt)。
+`ui.feice.mochi.navigation` 建在 **Navigation 3**（`androidx.navigation3`）上：应用自己持有类型安全的返回栈（`NavBackStack<NavKey>`），Mochi 在它上面渲染来源容器变形、侧推、共享顶栏与返回手势。开发应用先读 [应用接入规范](application-integration.md)，完整三页代码见 [MochiAppStarter.kt](../../../example/src/main/java/ui/feice/mochi/starter/MochiAppStarter.kt)。
 
 ## 先选择转场
 
 | 场景 | 接法 | 顶栏行为 |
 |---|---|---|
-| 卡片或图标一镜到底打开整页 | `mochiNavSource` + `push(route, from = key)` | 整页连同顶栏从来源长出来，关闭时缩回来源 |
-| 列表继续进入详情、设置子页 | `push(route)`，不传来源 | 页面侧推；已登记的共享顶栏留在原位变形 |
-| 多页面板 | 同一个独立导航器传给 `MochiSheet` 与内部 `MochiNavHost` | 内页侧推共享顶栏，返回先退页再关面板 |
+| 卡片或图标一镜到底打开整页 | `mochiNavSource` + key 带上 `mochiSource` | 整页连同顶栏从来源长出来，关闭时缩回来源 |
+| 列表继续进入详情、设置子页 | `stack.add(key)`，key 不带来源 | 页面侧推；已登记的共享顶栏留在原位变形 |
+| 多页面板 | 同一个返回栈传给 `MochiSheet` 与内部 `MochiNavHost` | 内页侧推共享顶栏，返回先退页再关面板 |
 
 **不要使用 `mochiSharedElement` 实现共享顶栏或图标飞行。它已废弃且是 no-op。** 当前来源转场是容器变形与卡片/页面内容交叉淡化，没有独立元素飞行动画；共享顶栏是另一套有效能力。
 
 | API | 说明 |
 |---|---|
-| `rememberMochiNavigator(root)` | String 路由页面栈，保存在 rememberSaveable，支持旋转与进程重建 |
-| `MochiNavHost(navigator)` | 页面显示、转场、系统返回与全屏右滑返回 |
-| `push(route, from = key)` / `push(route)` | 来源容器变形 / 侧推 |
-| `pop()` / `popTo(index)` | 返回一级 / 返回更早页面（根页 index 为 0），被打断的侧推页从当前位置继续退出 |
-| `MochiNavigator.current` | 当前主机的导航器 |
+| `rememberNavBackStack(Home)` | Navigation 3 的返回栈，进程重建可恢复；key 是 `@Serializable` 的数据类/对象（不要持久化就用 `remember { NavBackStack(Home) }`） |
+| `MochiNavHost(backStack, entryProvider)` | 页面显示、转场、系统返回与全屏右滑返回；页面由 Navigation 3 的 `entryProvider { entry<Home> { … } }` DSL 提供 |
+| `stack.add(key)` / `stack.removeLast()` | 推入 / 返回。key 带的 `mochiSource` 与登记的 `mochiNavSource` 对上就是来源变形，否则侧推 |
+| `stack.mochiPopTo(index)` | 返回更早页面（根页 index 为 0），被打断的侧推页从当前位置继续退出 |
+| `LocalMochiNavBackStack` | 当前主机的返回栈，深层页面、浮层里取用 |
+| `MochiNavKey` | 想用来源变形的 key 实现它（带 `mochiSource`）；普通 `NavKey` 页面一律侧推 |
 | `mochiNavSource(key, cornerRadius, color)` | 来源登记；key、圆角、底色与真实来源卡片一致 |
 | `mochiNavOccluder()` | 浮在内容上的栏登记为遮挡物：从来源打开时栏先盖在变形容器上再随进度淡掉（玻璃栏这段时间透出的是正在展开的容器，不是被盖住的旧内容）；`MochiTitleBar`、`mochiScrollEdgeFade`、`MochiTabBar`、`MochiBottomToolbar` 已自带 |
 | `rememberMochiScreenCorners()` | 四个物理圆角，单位 px，不是 dp |
 | `MochiNavHost(corners = …)` | 覆盖圆角；默认在面板内继承面板轮廓，其他位置使用屏幕圆角；`MochiScreenCorners.None` 显式关闭内页转场圆角 |
+
+栈的等值语义按 Navigation 3：**等值的 key 就是同一个目的地**——push 已在栈里的 key 不会再开一页，想开第二页让 key 带上不同的参数。来源（`mochiSource`）是 key 上的数据，进程重建后随栈一起恢复。
 
 ## 一镜到底动画
 
@@ -31,36 +34,53 @@
 ```kotlin
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.navigation3.runtime.NavKey
+import androidx.navigation3.runtime.entryProvider
+import androidx.navigation3.runtime.rememberNavBackStack
+import kotlinx.serialization.Serializable
 import ui.feice.mochi.list.MochiListCard
 import ui.feice.mochi.list.MochiListDefaults
 import ui.feice.mochi.list.MochiListRow
 import ui.feice.mochi.navigation.MochiBackButton
 import ui.feice.mochi.navigation.MochiLargeTitleScaffold
 import ui.feice.mochi.navigation.MochiNavHost
+import ui.feice.mochi.navigation.MochiNavKey
 import ui.feice.mochi.navigation.mochiNavSource
-import ui.feice.mochi.navigation.rememberMochiNavigator
 import ui.feice.mochi.theme.MochiDefaults
+
+@Serializable
+data object Home : NavKey
+
+@Serializable
+data class Detail(override val mochiSource: String? = null) : MochiNavKey
 
 @Composable
 fun NavigationBasics() {
-    val nav = rememberMochiNavigator("home")
-    MochiNavHost(nav) { route ->
-        when (route) {
-            "home" -> MochiLargeTitleScaffold(title = "Home") {
-                MochiListCard(
-                    modifier = Modifier.mochiNavSource("entry", MochiListDefaults.SectionCorner, MochiDefaults.groupedContainer()),
-                ) {
-                    MochiListRow("Open detail", chevron = true, onClick = { nav.push("detail", from = "entry") })
+    val stack = rememberNavBackStack(Home)
+    MochiNavHost(
+        backStack = stack,
+        entryProvider = entryProvider {
+            entry<Home> {
+                MochiLargeTitleScaffold(title = "Home") {
+                    MochiListCard(
+                        modifier = Modifier.mochiNavSource("entry", MochiListDefaults.SectionCorner, MochiDefaults.groupedContainer()),
+                    ) {
+                        MochiListRow("Open detail", chevron = true, onClick = { stack.add(Detail(mochiSource = "entry")) })
+                    }
                 }
             }
-            "detail" -> MochiLargeTitleScaffold(title = "Detail", navigationIcon = { MochiBackButton() }) {
-                MochiListCard { MochiListRow("Opened from the source card") }
+            entry<Detail> {
+                MochiLargeTitleScaffold(title = "Detail", navigationIcon = { MochiBackButton() }) {
+                    MochiListCard { MochiListRow("Opened from the source card") }
+                }
             }
-        }
-    }
+        },
+    )
 }
 
 ```
+
+key 实现 `NavKey` 并标注 `@Serializable` 才能配合保存的栈；应用需加 `org.jetbrains.kotlin.plugin.serialization` 插件。返回就是 `stack.removeLast()`（或应用自己接的任何返回处理）。
 
 来源修饰放在整张卡片外层，记录整张卡片。来源与目标页按完整尺寸排版，转场通过图层移动、缩放和圆角变化完成，不为动画每帧重排页面。当前默认打开和关闭的大小、圆角都用 iOS 的 smooth 300ms（`MochiSprings.smooth(300)`，不回弹、平滑停住）；位置单独用一根带一点回弹的 snappy 300ms（`openMove` / `closeMove`），到位时轻轻冲过一点再落回。途中掉头保留速度。打开途中就能直接往回划，不用等转场停稳；正在缩回去时点它会从当前位置重新打开。自定义时通过 `MochiNavDefaults.spec()` 配置，不复制另一套引擎。
 
@@ -68,9 +88,9 @@ fun NavigationBasics() {
 
 ## 侧推与返回
 
-`nav.push("detail")` 不传 `from`，页面从右侧进入；下层页向左退。顶栏必须按下一节登记，不能把“用了 Mochi 按钮”当成已经共享。`MochiNavSpec.push` 默认是临界阻尼弹簧，可在当前进度与速度上打断、返回或再次推入，不重置到起点。
+`stack.add(key)` 不带来源，页面从右侧进入；下层页向左退。顶栏必须按下一节登记，不能把“用了 Mochi 按钮”当成已经共享。`MochiNavSpec.push` 默认是临界阻尼弹簧，可在当前进度与速度上打断、返回或再次推入，不重置到起点。
 
-`MochiBackButton` 默认调用当前导航器 `pop()`；不在 `MochiNavHost` 里、或已经在第一页时，交给 Activity 的 `OnBackPressedDispatcher`（由外面的返回处理关面板或退出 Activity），按钮不会点了没反应；系统返回与返回手势由主机处理，不另加一个竞争的页面返回处理器。独立浮层按其自身返回生命周期先关闭。`popTo(index)` 跳回更早页面；`MochiBackButton(history = { route -> 标题 })` 启用长按返回历史，标题映射由业务提供。
+`MochiBackButton` 默认退所在返回栈；不在 `MochiNavHost` 里、或已经在第一页时，交给 Activity 的 `OnBackPressedDispatcher`（由外面的返回处理关面板或退出 Activity），按钮不会点了没反应；系统返回与返回手势由主机处理，不另加一个竞争的页面返回处理器。独立浮层按其自身返回生命周期先关闭。`stack.mochiPopTo(index)` 跳回更早页面；`MochiBackButton(history = { key -> 标题 })` 启用长按返回历史，标题映射由业务提供。
 
 预测性返回需要 application 配置 `android:enableOnBackInvokedCallback="true"`。Android 14 的开发者选项可能还需开启预测性返回动画；三键导航或没有手势进度时仍可返回，只播放提交后的退出动画。
 
@@ -123,7 +143,7 @@ fun DetailActions(onDone: () -> Unit) {
 
 面板内页的转场轮廓、压暗与阴影跟随可见面板底边，包含全屏导航区；正文单独保留固定高度和安全区。半屏底部两角按可见底边裁切，全屏底部两角为直角，不在内部导航主机外追加底部 padding。
 
-多页面板的独立导航器同时传给 `MochiSheet(navigator = nav)` 与内部 `MochiNavHost(nav)`（省略 corners，自动继承面板转场轮廓；全屏侧推底部保持直角），内部配置匹配面板底色的 `pushBackdrop`，使用 `MochiSheetHeader` 与稳定顶栏 ID。返回先退出子页，根页才关闭，不能在子页退出中途把返回交给后面的页面。详见 [底部面板](../components/sheet.md)。
+多页面板的返回栈同时传给 `MochiSheet(backStack = nav)` 与内部 `MochiNavHost(nav)`（省略 corners，自动继承面板转场轮廓；全屏侧推底部保持直角），内部配置匹配面板底色的 `pushBackdrop`，使用 `MochiSheetHeader` 与稳定顶栏 ID。返回先退出子页，根页才关闭，不能在子页退出中途把返回交给后面的页面。详见 [底部面板](../components/sheet.md)。
 
 底栏放在所属页面内，被新页覆盖时使用 `mochiHideWhenCovered()`；返回时随主机进度恢复。手动收起/展开与滚动联动按业务选择，读取真实 `collapsed` 状态。详见 [标签栏](../components/tabbar.md)。
 

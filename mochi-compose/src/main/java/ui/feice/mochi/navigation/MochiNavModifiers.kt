@@ -70,12 +70,12 @@ private class NavSourceNode(key: String, private var radius: Dp, private var col
     LayoutAwareModifierNode,
     DrawModifierNode {
     private val handle = SourceHandle(key)
-    private var nav: MochiNavigator? = null
+    private var nav: MochiNavEngine? = null
 
     // 导航器和所在的页对一个节点来说一辈子不变（换页会换节点），挂上时读一次就够
     @SuppressLint("SuspiciousCompositionLocalModifierRead")
     override fun onAttach() {
-        nav = currentValueOf(LocalMochiNavigator)
+        nav = currentValueOf(LocalMochiNavEngine)
         handle.entry = currentValueOf(LocalMochiNavEntry)
         handle.shown = currentValueOf(LocalMochiTabPageShown)
         handle.layer = requireGraphicsContext().createGraphicsLayer()
@@ -158,12 +158,12 @@ private class OccluderNode :
     LayoutAwareModifierNode,
     DrawModifierNode {
     private val handle = OccluderHandle()
-    private var nav: MochiNavigator? = null
+    private var nav: MochiNavEngine? = null
 
     // 导航器和所在的页对一个节点来说一辈子不变（换页会换节点），挂上时读一次就够
     @SuppressLint("SuspiciousCompositionLocalModifierRead")
     override fun onAttach() {
-        val n = currentValueOf(LocalMochiNavigator) ?: return
+        val n = currentValueOf(LocalMochiNavEngine) ?: return
         handle.entry = currentValueOf(LocalMochiNavEntry) ?: return
         handle.shown = currentValueOf(LocalMochiTabPageShown)
         nav = n
@@ -227,12 +227,12 @@ private class HideWhenCoveredNode :
     GlobalPositionAwareModifierNode,
     DrawModifierNode {
     private val handle = HideHandle()
-    private var nav: MochiNavigator? = null
+    private var nav: MochiNavEngine? = null
 
     // 导航器和所在的页对一个节点来说一辈子不变（换页会换节点），挂上时读一次就够
     @SuppressLint("SuspiciousCompositionLocalModifierRead")
     override fun onAttach() {
-        nav = currentValueOf(LocalMochiNavigator)
+        nav = currentValueOf(LocalMochiNavEngine)
         handle.entry = currentValueOf(LocalMochiNavEntry)
         handle.shown = currentValueOf(LocalMochiTabPageShown)
         handle.layer = requireGraphicsContext().createGraphicsLayer()

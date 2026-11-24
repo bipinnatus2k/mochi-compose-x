@@ -3,7 +3,6 @@
 
 plugins {
     alias(libs.plugins.android.library)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.roborazzi)
     alias(libs.plugins.maven.publish)
@@ -11,10 +10,10 @@ plugins {
 
 android {
     namespace = "ui.feice.mochi"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
-        minSdk = 23
+        minSdk = 24
         consumerProguardFiles("consumer-rules.pro")
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -34,9 +33,9 @@ android {
 }
 
 kotlin {
-    explicitApi()
+    // AGP 9 内置 Kotlin：jvmTarget 默认跟 compileOptions；explicitApi 只作用于正式源码
     compilerOptions {
-        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+        explicitApi()
     }
 }
 
@@ -51,6 +50,9 @@ dependencies {
     implementation(libs.kyant.backdrop)
     // 公开 API 里用到 ImmutableList
     api(libs.kotlinx.collections.immutable)
+    // 导航栈与页面容器建在 Navigation 3 上（NavKey / NavEntry / NavBackStack / NavDisplay）
+    api(libs.androidx.navigation3.runtime)
+    api(libs.androidx.navigation3.ui)
     // Monet：从种子色生成 MD3 tonal 配色
     implementation(libs.materialkolor.utilities)
     implementation(libs.androidx.activity.compose)

@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.navigation3.runtime.NavKey
 import kotlinx.collections.immutable.toImmutableList
 import ui.feice.mochi.basic.LocalBarControlGlass
 import ui.feice.mochi.basic.MochiAlign
@@ -47,18 +48,18 @@ import ui.feice.mochi.theme.MochiIcon
  * 不在 [MochiNavHost] 里（独立的 Activity、自己管页面的旧代码），或者已经在导航栈的第一页时，点了等于按系统返回键：
  * 交给 Activity 的 OnBackPressedDispatcher，由外面登记的返回处理（关面板、退出 Activity）接着处理，按钮不会点了没反应。
  *
- * @param history 把路由映射成菜单里显示的标题；null = 不支持长按
- * @param onClick 默认先退 MochiNavigator 的上一页，退不了再按系统返回处理
+ * @param history 把 key 映射成菜单里显示的标题；null = 不支持长按
+ * @param onClick 默认先退所在返回栈的上一页，退不了再按系统返回处理
  */
 @Composable
 public fun MochiBackButton(
     modifier: Modifier = Modifier,
     colors: MochiButtonColors = MochiButtonDefaults.barColors(),
-    history: ((route: String) -> String)? = null,
+    history: ((key: NavKey) -> String)? = null,
     onClick: (() -> Unit)? = null,
 ) {
-    val nav = MochiNavigator.current
-    val earlier = if (history != null && nav != null) nav.backStack.dropLast(1) else emptyList()
+    val stack = LocalMochiNavBackStack.current
+    val earlier = if (history != null && stack != null) stack.dropLast(1) else emptyList()
     val chevron: @Composable () -> Unit = {
         val color = LocalContentColor.current
         MochiIcon("chevron-back", Modifier.size(22.dp), tint = color) { slot ->
@@ -78,7 +79,7 @@ public fun MochiBackButton(
     val back = {
         when {
             onClick != null -> onClick()
-            nav?.pop() == true -> Unit
+            stack != null && stack.size > 1 -> stack.removeAt(stack.lastIndex)
             else -> dispatcher?.onBackPressed()
         }
     }
@@ -87,7 +88,7 @@ public fun MochiBackButton(
     val sharedChevron: @Composable () -> Unit = {
         Box(Modifier.mochiNavBarItem(BackBarItemId, contentKey = BackBarItemId), contentAlignment = Alignment.Center) { chevron() }
     }
-    if (earlier.isEmpty() || history == null || nav == null) {
+    if (earlier.isEmpty() || history == null || stack == null) {
         MochiBarIconButton(
             onClick = { back() },
             modifier = shared.semantics { contentDescription = "返回" },
@@ -105,7 +106,7 @@ public fun MochiBackButton(
             expanded = open,
             onExpandedChange = { open = it },
             items = items,
-            onItemClick = { i -> nav.popTo(earlier.size - 1 - i) },
+            onItemClick = { i -> stack.mochiPopTo(earlier.size - 1 - i) },
             modifier = shared.semantics { contentDescription = "返回" },
             colors = MochiDropdownDefaults.iconDropdownColors(buttonColor = colors.container, buttonContentColor = colors.content),
             behavior = MochiDropdownBehavior(openMode = MochiOpenMode.Cover, trigger = MochiTrigger.LongPress, align = MochiAlign.Start),

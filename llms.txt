@@ -7,7 +7,7 @@ otherwise report "not applicable" with a reason. Explicit user instructions prev
 
 ## Required baseline
 
-- Root: MochiTheme + ProvideMochiOverscroll + rememberMochiNavigator/MochiNavHost for Mochi navigation.
+- Root: MochiTheme + ProvideMochiOverscroll + rememberNavBackStack/MochiNavHost for Mochi navigation (Navigation 3, type-safe keys).
 - Push pages: library toolbar controls with stable semantic navId values on both
   pages. MochiBackButton registers itself. Register MochiBarGroup shape AND each
   participating MochiBarGroupItem content; use stable value-based icon contentKey.
@@ -30,7 +30,7 @@ otherwise report "not applicable" with a reason. Explicit user instructions prev
 - Use blur text/icon transitions, visibility and counters for changing content.
   Smooth card resizing has one animation owner; do not chase animated inner sizes.
 - Custom scrollers inherit Overscroll and use MochiScrollDefaults.flingBehavior().
-- Multi-page sheets use their own navigator in both MochiSheet and MochiNavHost,
+- Multi-page sheets pass one back stack to both MochiSheet and MochiNavHost,
   outer-owned corners, shared internal toolbar and pop-before-dismiss back order.
 - Covered tab bars use mochiHideWhenCovered as appropriate. Respect insets, physical
   corners, large type, icon semantics, disabled input, cancellation and reduced motion.

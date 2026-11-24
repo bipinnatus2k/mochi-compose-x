@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
@@ -24,6 +25,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.navigation3.runtime.NavBackStack
+import androidx.navigation3.runtime.NavKey
+import androidx.navigation3.runtime.entryProvider
+import androidx.navigation3.runtime.rememberNavBackStack
 import ui.feice.mochi.basic.MochiBarButton
 import ui.feice.mochi.basic.MochiBarIconButton
 import ui.feice.mochi.basic.MochiButton
@@ -38,6 +43,10 @@ import ui.feice.mochi.basic.MochiSwitch
 import ui.feice.mochi.basic.Text
 import ui.feice.mochi.basic.mochiSheetBackdrop
 import ui.feice.mochi.basic.rememberMochiSheetState
+import ui.feice.mochi.demo.SheetAdvanced
+import ui.feice.mochi.demo.SheetIp
+import ui.feice.mochi.demo.SheetRoot
+import ui.feice.mochi.demo.SheetSecurity
 import ui.feice.mochi.demo.catalog.CatalogEntry
 import ui.feice.mochi.demo.common.DemoIcons
 import ui.feice.mochi.demo.common.DemoPage
@@ -48,7 +57,6 @@ import ui.feice.mochi.list.MochiListCard
 import ui.feice.mochi.list.MochiListRow
 import ui.feice.mochi.navigation.MochiNavDefaults
 import ui.feice.mochi.navigation.MochiNavHost
-import ui.feice.mochi.navigation.rememberMochiNavigator
 import ui.feice.mochi.theme.MochiDefaults
 import ui.feice.mochi.theme.MochiTheme
 
@@ -82,11 +90,22 @@ private fun NetworkSheet(state: MochiSheetState, onDismiss: (String) -> Unit) {
     var security by rememberSaveable { mutableStateOf("WPA3") }
     var auto by rememberSaveable { mutableStateOf(true) }
     var ip by rememberSaveable { mutableStateOf("自动（DHCP）") }
-    val cs = MochiTheme.colorScheme
     // 每次关闭重置页栈，重新打开不停在上次的子页
     key(session) {
-        val nav = rememberMochiNavigator("network")
-        MochiSheet(state, navigator = nav, onDismiss = {
+        val stack = rememberNavBackStack(SheetRoot)
+
+        // 面板演示的表单状态由面板持有，页面只收值和回调（不共享 MutableState 所有权）
+        fun ui() = NetworkSheetUi(
+            result = result,
+            security = security,
+            auto = auto,
+            ip = ip,
+            setSecurity = { security = it },
+            setAuto = { auto = it },
+            setIp = { ip = it },
+            onDoneAtRoot = { result = "已加入网络" },
+        )
+        MochiSheet(state, backStack = stack, onDismiss = {
             onDismiss(result)
             result = "面板关了"
             session++
@@ -94,68 +113,92 @@ private fun NetworkSheet(state: MochiSheetState, onDismiss: (String) -> Unit) {
             // 要在面板里面读：玻璃面板里它是透明的，底色由面板画
             val surface = MochiDefaults.sheetBackground()
             MochiNavHost(
-                nav,
+                backStack = stack,
                 spec = MochiNavDefaults.spec(pushBackdrop = surface),
                 // 不在导航主机外加导航栏 padding，否则转场图层会被截短
-            ) { route ->
-                val root = route == "network"
-                MochiSheetScaffold(
-                    modifier = Modifier.fillMaxSize().background(surface),
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(20.dp),
-                    header = {
-                        NetworkHeader(
-                            title = networkTitle(route),
-                            root = root,
-                            onBack = { if (root) state.hide() else nav.pop() },
-                            onDone = {
-                                if (root) {
-                                    result = "已加入网络"
-                                    state.hide()
-                                } else {
-                                    nav.pop()
-                                }
-                            },
-                        )
-                    },
-                ) {
-                    when (route) {
-                        "network" -> {
-                            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                                Glyph(DemoIcons.WIFI, cs.primary, size = 64, filled = true)
-                            }
-                            MochiListCard {
-                                MochiListRow("名称", value = "HONOR-1059")
-                                MochiListRow("安全性", value = security, chevron = true, onClick = { nav.push("security") })
-                                MochiListRow("自动加入", trailing = { MochiSwitch(auto, { auto = it }) })
-                                MochiListRow("高级设置", chevron = true, onClick = { nav.push("advanced") })
-                            }
-                            SheetHelp("点安全性或高级设置进入下一页。")
-                        }
+                entryProvider = entryProvider {
+                    entry<SheetRoot> { NetworkSheetPage(it, state, stack, ui()) }
+                    entry<SheetSecurity> { NetworkSheetPage(it, state, stack, ui()) }
+                    entry<SheetAdvanced> { NetworkSheetPage(it, state, stack, ui()) }
+                    entry<SheetIp> { NetworkSheetPage(it, state, stack, ui()) }
+                },
+            )
+        }
+    }
+}
 
-                        "security" -> {
-                            MochiListCard {
-                                listOf("无", "WPA2", "WPA3").forEach { value ->
-                                    MochiListRow(value, checked = security == value, onClick = { security = value })
-                                }
-                            }
-                            SheetHelp("选择后点完成返回。")
-                        }
+/** 面板演示的表单值与回调（普通值对象：页面读值、回调改面板里的状态） */
+private class NetworkSheetUi(
+    val result: String,
+    val security: String,
+    val auto: Boolean,
+    val ip: String,
+    val setSecurity: (String) -> Unit,
+    val setAuto: (Boolean) -> Unit,
+    val setIp: (String) -> Unit,
+    val onDoneAtRoot: () -> Unit,
+)
 
-                        "advanced" -> {
-                            MochiListCard {
-                                MochiListRow("自动加入", trailing = { MochiSwitch(auto, { auto = it }) })
-                                MochiListRow("IP 设置", value = ip, chevron = true, onClick = { nav.push("ip") })
-                            }
-                        }
+/** 面板里的一页：按 key 画内容；返回由 [MochiSheet] 的 backStack 接管（根页返回关面板） */
+@Composable
+private fun NetworkSheetPage(key: NavKey, state: MochiSheetState, stack: NavBackStack<NavKey>, ui: NetworkSheetUi) {
+    val cs = MochiTheme.colorScheme
+    val root = key == SheetRoot
+    val surface = MochiDefaults.sheetBackground()
+    MochiSheetScaffold(
+        modifier = Modifier.fillMaxSize().background(surface),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(20.dp),
+        header = {
+            NetworkHeader(
+                title = networkTitle(key),
+                root = root,
+                onBack = { if (root) state.hide() else stack.removeAt(stack.lastIndex) },
+                onDone = {
+                    if (root) {
+                        ui.onDoneAtRoot()
+                        state.hide()
+                    } else {
+                        stack.removeAt(stack.lastIndex)
+                    }
+                },
+            )
+        },
+    ) {
+        when (key) {
+            SheetRoot -> {
+                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    Glyph(DemoIcons.WIFI, cs.primary, size = 64, filled = true)
+                }
+                MochiListCard {
+                    MochiListRow("名称", value = "HONOR-1059")
+                    MochiListRow("安全性", value = ui.security, chevron = true, onClick = { stack.add(SheetSecurity) })
+                    MochiListRow("自动加入", trailing = { MochiSwitch(ui.auto, { ui.setAuto(it) }) })
+                    MochiListRow("高级设置", chevron = true, onClick = { stack.add(SheetAdvanced) })
+                }
+                SheetHelp("点安全性或高级设置进入下一页。")
+            }
 
-                        "ip" -> {
-                            MochiListCard {
-                                listOf("自动（DHCP）", "手动").forEach { value ->
-                                    MochiListRow(value, checked = ip == value, onClick = { ip = value })
-                                }
-                            }
-                        }
+            SheetSecurity -> {
+                MochiListCard {
+                    listOf("无", "WPA2", "WPA3").forEach { value ->
+                        MochiListRow(value, checked = ui.security == value, onClick = { ui.setSecurity(value) })
+                    }
+                }
+                SheetHelp("选择后点完成返回。")
+            }
+
+            SheetAdvanced -> {
+                MochiListCard {
+                    MochiListRow("自动加入", trailing = { MochiSwitch(ui.auto, { ui.setAuto(it) }) })
+                    MochiListRow("IP 设置", value = ui.ip, chevron = true, onClick = { stack.add(SheetIp) })
+                }
+            }
+
+            else -> {
+                MochiListCard {
+                    listOf("自动（DHCP）", "手动").forEach { value ->
+                        MochiListRow(value, checked = ui.ip == value, onClick = { ui.setIp(value) })
                     }
                 }
             }
@@ -163,10 +206,10 @@ private fun NetworkSheet(state: MochiSheetState, onDismiss: (String) -> Unit) {
     }
 }
 
-private fun networkTitle(route: String): String = when (route) {
-    "security" -> "安全性"
-    "advanced" -> "高级设置"
-    "ip" -> "IP 设置"
+private fun networkTitle(key: NavKey): String = when (key) {
+    SheetSecurity -> "安全性"
+    SheetAdvanced -> "高级设置"
+    SheetIp -> "IP 设置"
     else -> "加入网络"
 }
 

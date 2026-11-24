@@ -10,8 +10,12 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.navigation3.runtime.NavBackStack
+import androidx.navigation3.runtime.NavKey
+import androidx.navigation3.runtime.entryProvider
 import androidx.test.ext.junit.rules.ActivityScenarioRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -21,8 +25,6 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import ui.feice.mochi.navigation.MochiNavHost
-import ui.feice.mochi.navigation.MochiNavigator
-import ui.feice.mochi.navigation.rememberMochiNavigator
 import ui.feice.mochi.theme.MochiTheme
 
 /** 全屏右滑返回按松手速度判断：划一小段停住或往右松手就返回，往回甩就取消，不看有没有划过一半。 */
@@ -32,7 +34,7 @@ class SwipeBackVelocityRegression {
     val rule = ActivityScenarioRule(MainActivity::class.java)
 
     private val inst = InstrumentationRegistry.getInstrumentation()
-    private lateinit var nav: MochiNavigator
+    private lateinit var stack: NavBackStack<NavKey>
     private var downTime = 0L
 
     private fun touch(action: Int, x: Float) {
@@ -63,10 +65,10 @@ class SwipeBackVelocityRegression {
     private fun ramp(from: Float, to: Float, steps: Int) = (0..steps).map { from + (to - from) * it / steps }
 
     private fun openDetail() {
-        inst.runOnMainSync { nav.push("detail") }
+        inst.runOnMainSync { stack.add(SwipeDetail) }
         inst.waitForIdleSync()
         SystemClock.sleep(1000)
-        assertEquals("detail", nav.current)
+        assertEquals(SwipeDetail, stack.last())
     }
 
     @Test
@@ -74,10 +76,15 @@ class SwipeBackVelocityRegression {
         rule.scenario.onActivity { activity ->
             activity.setContent {
                 MochiTheme {
-                    nav = rememberMochiNavigator("home")
-                    MochiNavHost(nav, Modifier.fillMaxSize()) { route ->
-                        Box(Modifier.fillMaxSize().background(if (route == "home") Color.White else Color.LightGray))
-                    }
+                    stack = remember { NavBackStack<NavKey>(SwipeHome) }
+                    MochiNavHost(
+                        backStack = stack,
+                        modifier = Modifier.fillMaxSize(),
+                        entryProvider = entryProvider {
+                            entry<SwipeHome> { Box(Modifier.fillMaxSize().background(Color.White)) }
+                            entry<SwipeDetail> { Box(Modifier.fillMaxSize().background(Color.LightGray)) }
+                        },
+                    )
                 }
             }
         }
@@ -89,20 +96,25 @@ class SwipeBackVelocityRegression {
         openDetail()
         drag(ramp(200f, 200f + width * 0.15f, 10), stepMs = 16, holdMs = 300)
         SystemClock.sleep(1000)
-        assertEquals("划过起点停住松手要返回", "home", nav.current)
+        assertEquals("划过起点停住松手要返回", SwipeHome, stack.last())
 
         // 往右划 40% 再快速往回甩（仍在起点右边）：取消
         openDetail()
         drag(ramp(200f, 200f + width * 0.4f, 10) + ramp(200f + width * 0.4f, 200f + width * 0.1f, 4).drop(1), stepMs = 16)
         SystemClock.sleep(1000)
-        assertEquals("往回甩要取消", "detail", nav.current)
+        assertEquals("往回甩要取消", SwipeDetail, stack.last())
 
         // 往右划 10% 时快速松手（往右的速度）：返回
-        inst.runOnMainSync { nav.pop() }
+        inst.runOnMainSync { stack.removeAt(stack.lastIndex) }
         SystemClock.sleep(1000)
         openDetail()
         drag(ramp(200f, 200f + width * 0.1f, 4), stepMs = 8)
         SystemClock.sleep(1000)
-        assertEquals("往右甩一小段要返回", "home", nav.current)
+        assertEquals("往右甩一小段要返回", SwipeHome, stack.last())
     }
 }
+
+/** 本测试专用的 key */
+private data object SwipeHome : NavKey
+
+private data object SwipeDetail : NavKey

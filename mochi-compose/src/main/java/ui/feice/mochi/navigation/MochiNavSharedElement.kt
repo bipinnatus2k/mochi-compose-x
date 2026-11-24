@@ -95,11 +95,11 @@ private class SharedElementNode(key: String, shape: CornerBasedShape) :
     LayoutAwareModifierNode,
     DrawModifierNode {
     val handle = SharedHandle(key, shape)
-    private var nav: MochiNavigator? = null
+    private var nav: MochiNavEngine? = null
 
     @SuppressLint("SuspiciousCompositionLocalModifierRead")
     override fun onAttach() {
-        nav = currentValueOf(LocalMochiNavigator)
+        nav = currentValueOf(LocalMochiNavEngine)
         handle.entry = currentValueOf(LocalMochiNavEntry)
         handle.density = requireDensity()
         handle.layer = requireGraphicsContext().createGraphicsLayer()

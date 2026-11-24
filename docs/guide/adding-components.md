@@ -55,7 +55,7 @@ If an effect falls short, extend the effect module (keeping it backward compatib
 - Use `DemoSettingsSection` for settings, segmented choices, parameters and version values, reusing `MochiListRow` (`Toggles` / `Param` use list rows within that explicit scope). Reserve `DemoSection` for custom stages; do not add generic card padding around settings rows. Shared widgets live in `demo/common/`: `Toggles`, `Param`, `Code`, `Glyph`, `Icons`
 - Give the catalog entry a `glyph` (a 24×24 stroke icon path, added to `Icons`)
 - Switch the catalog entry to `CatalogStatus.Ready` and set `page = { XxxPage(it) }`
-- Go back from a page with `MochiNavigator.current?.pop()` (the `DemoPage` back button already does this)
+- Go back from a page with `LocalMochiNavBackStack.current?.removeLast()` (the `DemoPage` back button already does this)
 
 ## 6. Verify and commit
 

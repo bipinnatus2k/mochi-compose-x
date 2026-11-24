@@ -3,15 +3,14 @@
 
 plugins {
     alias(libs.plugins.android.library)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.maven.publish)
 }
 
 android {
     namespace = "ui.feice.mochi.nothing"
-    compileSdk = 36
-    defaultConfig { minSdk = 23 }
+    compileSdk = 37
+    defaultConfig { minSdk = 24 }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -20,8 +19,9 @@ android {
 }
 
 kotlin {
-    explicitApi()
-    compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) }
+    compilerOptions {
+        explicitApi()
+    }
 }
 
 dependencies {

@@ -29,6 +29,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import ui.feice.mochi.basic.Text
+import ui.feice.mochi.demo.CatalogPage
 import ui.feice.mochi.demo.about.AboutButton
 import ui.feice.mochi.demo.common.AppIcon
 import ui.feice.mochi.demo.common.CatalogIconShape
@@ -42,7 +43,7 @@ import ui.feice.mochi.effect.glow.mochiPressGlow
 import ui.feice.mochi.effect.glow.rememberMochiGlowState
 import ui.feice.mochi.effect.mask.mochiScrollEdgeBlur
 import ui.feice.mochi.effect.overscroll.MochiScrollDefaults
-import ui.feice.mochi.navigation.MochiNavigator
+import ui.feice.mochi.navigation.LocalMochiNavBackStack
 import ui.feice.mochi.navigation.MochiScrollEdgeDefaults
 import ui.feice.mochi.navigation.MochiTabReselectHandler
 import ui.feice.mochi.navigation.MochiTabScaffoldDefaults
@@ -123,7 +124,7 @@ private fun catalogTitleProgress(state: LazyGridState): Float {
 @Composable
 private fun CatalogCard(entry: CatalogEntry, modifier: Modifier = Modifier) {
     val ts = MochiTheme.textStyles
-    val nav = MochiNavigator.current
+    val stack = LocalMochiNavBackStack.current
     val bg = MochiDefaults.groupedContainer()
     val radius = 28.dp
     val shape = MochiTheme.shapes.extraLarge
@@ -139,7 +140,7 @@ private fun CatalogCard(entry: CatalogEntry, modifier: Modifier = Modifier) {
             .height(184.dp)
             .mochiPressGlow(glow, shape)
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
-                nav?.push(entry.id, from = entry.id)
+                stack?.add(CatalogPage(entry.id, mochiSource = entry.id))
             }
             .padding(16.dp),
     ) {

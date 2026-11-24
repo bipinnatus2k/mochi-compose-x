@@ -27,7 +27,11 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.navigation3.runtime.NavKey
+import androidx.navigation3.runtime.entryProvider
+import androidx.navigation3.runtime.rememberNavBackStack
 import kotlinx.coroutines.delay
+import kotlinx.serialization.Serializable
 import ui.feice.mochi.basic.MochiBarButton
 import ui.feice.mochi.basic.MochiBarGroup
 import ui.feice.mochi.basic.MochiBarGroupItem
@@ -48,8 +52,8 @@ import ui.feice.mochi.list.MochiListStatusChip
 import ui.feice.mochi.navigation.MochiBackButton
 import ui.feice.mochi.navigation.MochiLazyLargeTitleScaffold
 import ui.feice.mochi.navigation.MochiNavHost
+import ui.feice.mochi.navigation.MochiNavKey
 import ui.feice.mochi.navigation.mochiNavSource
-import ui.feice.mochi.navigation.rememberMochiNavigator
 import ui.feice.mochi.theme.ColorSchemeMode
 import ui.feice.mochi.theme.LocalContentColor
 import ui.feice.mochi.theme.MochiDefaults
@@ -66,9 +70,16 @@ class MochiAppStarterActivity : ComponentActivity() {
     }
 }
 
-private const val Home = "home"
-private const val ListRoute = "list"
-private const val Detail = "detail"
+/** 页面 key（Navigation 3 的类型安全路由；序列化后进程重建也能恢复）。[StarterList] 带来源，从卡片变形打开。 */
+@Serializable
+data object StarterHome : NavKey
+
+@Serializable
+data class StarterList(override val mochiSource: String? = null) : MochiNavKey
+
+@Serializable
+data object StarterDetail : NavKey
+
 private const val ListSource = "starter.list-card"
 
 // Keep the same semantic identifiers on both sides of the push, without route prefixes.
@@ -80,7 +91,7 @@ private const val SecondaryAction = "starter.secondary"
 fun MochiAppStarter(modifier: Modifier = Modifier) {
     val controller = remember { ThemeController(ColorSchemeMode.MonetSystem) }
     MochiTheme(controller = controller) {
-        val nav = rememberMochiNavigator(Home)
+        val stack = rememberNavBackStack(StarterHome)
         val toast = rememberMochiToastState()
         var visits by rememberSaveable { mutableLongStateOf(0L) }
         var refreshes by rememberSaveable { mutableLongStateOf(0L) }
@@ -88,137 +99,145 @@ fun MochiAppStarter(modifier: Modifier = Modifier) {
         var expanded by rememberSaveable { mutableStateOf(false) }
         var textAction by rememberSaveable { mutableStateOf(false) }
         ProvideMochiOverscroll {
-            MochiNavHost(nav, modifier.fillMaxSize()) { route ->
-                val back: @Composable () -> Unit = { MochiBackButton(history = ::starterTitle) }
-                when (route) {
-                    Home -> MochiLazyLargeTitleScaffold(title = "首页") {
-                        item {
-                            MochiListCard(
-                                modifier = Modifier.mochiNavSource(
-                                    ListSource,
-                                    MochiListDefaults.SectionCorner,
-                                    MochiDefaults.groupedContainer(),
-                                ),
-                            ) {
-                                // 从卡片整页展开，返回时缩回原位
-                                MochiListRow(
-                                    "示例列表",
-                                    chevron = true,
-                                    onClick = { nav.push(ListRoute, from = ListSource) },
-                                )
-                            }
-                        }
-                    }
-
-                    ListRoute -> MochiLazyLargeTitleScaffold(
-                        title = "列表",
-                        navigationIcon = back,
-                        actions = {
-                            MochiBarGroup(navId = PrimaryAction) {
-                                MochiBarGroupItem(
-                                    onClick = { editing = !editing },
-                                    modifier = Modifier.semantics { contentDescription = if (editing) "完成编辑" else "编辑" },
-                                    navId = PrimaryAction,
-                                    contentKey = if (editing) StarterGlyph.Check else StarterGlyph.Edit,
+            MochiNavHost(
+                backStack = stack,
+                modifier = modifier.fillMaxSize(),
+                entryProvider = entryProvider {
+                    val back: @Composable () -> Unit = { MochiBackButton(history = ::starterTitle) }
+                    entry<StarterHome> {
+                        MochiLazyLargeTitleScaffold(title = "首页") {
+                            item {
+                                MochiListCard(
+                                    modifier = Modifier.mochiNavSource(
+                                        ListSource,
+                                        MochiListDefaults.SectionCorner,
+                                        MochiDefaults.groupedContainer(),
+                                    ),
                                 ) {
-                                    MochiBlurCrossfade(if (editing) StarterGlyph.Check else StarterGlyph.Edit) { glyph ->
-                                        StarterIcon(glyph)
-                                    }
+                                    // 从卡片整页展开，返回时缩回原位
+                                    MochiListRow(
+                                        "示例列表",
+                                        chevron = true,
+                                        onClick = { stack.add(StarterList(mochiSource = ListSource)) },
+                                    )
                                 }
-                                MochiBarGroupItem(
-                                    onClick = { toast.show("已更新列表") },
-                                    modifier = Modifier.semantics { contentDescription = "更新列表" },
-                                    navId = SecondaryAction,
-                                    contentKey = StarterGlyph.Refresh,
-                                ) { StarterIcon(StarterGlyph.Refresh) }
-                            }
-                        },
-                        onRefresh = {
-                            // Local UI example only; replace with your repository's suspend reload operation.
-                            delay(450)
-                            refreshes++
-                        },
-                    ) {
-                        item {
-                            MochiBlurText(if (editing) "正在编辑" else "选择一项查看详情", style = MochiTheme.textStyles.bodyLarge)
-                        }
-                        item {
-                            MochiListCard {
-                                // 侧推到详情，返回按钮和右侧操作在共享顶栏里变形
-                                MochiListRow(
-                                    "示例项目",
-                                    chevron = true,
-                                    status = { MochiListStatusChip("示例") },
-                                    onClick = {
-                                        visits++
-                                        nav.push(Detail)
-                                    },
-                                )
-                                MochiListRow("打开次数", trailing = { MochiCounterText(visits) })
-                                MochiListRow("刷新次数", trailing = { MochiCounterText(refreshes) })
-                                // Choose before pushing: the shared toolbar morphs into the selected variant.
-                                MochiListRow("详情使用文字按钮", trailing = { MochiSwitch(textAction, { textAction = it }) })
                             }
                         }
                     }
 
-                    Detail -> MochiLazyLargeTitleScaffold(
-                        title = "详情",
-                        navigationIcon = back,
-                        actions = {
-                            // Both variants match the list group's primary content; shapes pair by position.
-                            if (textAction) {
-                                MochiBarButton("完成", onClick = {
-                                    toast.show("已保存")
-                                    nav.pop()
-                                }, navId = PrimaryAction)
-                            } else {
-                                MochiBarIconButton(
-                                    onClick = {
-                                        toast.show("已保存")
-                                        nav.pop()
-                                    },
-                                    modifier = Modifier.semantics { contentDescription = "完成" },
-                                    navId = PrimaryAction,
-                                    contentKey = StarterGlyph.Check,
-                                ) { StarterIcon(StarterGlyph.Check) }
+                    entry<StarterList> {
+                        MochiLazyLargeTitleScaffold(
+                            title = "列表",
+                            navigationIcon = back,
+                            actions = {
+                                MochiBarGroup(navId = PrimaryAction) {
+                                    MochiBarGroupItem(
+                                        onClick = { editing = !editing },
+                                        modifier = Modifier.semantics { contentDescription = if (editing) "完成编辑" else "编辑" },
+                                        navId = PrimaryAction,
+                                        contentKey = if (editing) StarterGlyph.Check else StarterGlyph.Edit,
+                                    ) {
+                                        MochiBlurCrossfade(if (editing) StarterGlyph.Check else StarterGlyph.Edit) { glyph ->
+                                            StarterIcon(glyph)
+                                        }
+                                    }
+                                    MochiBarGroupItem(
+                                        onClick = { toast.show("已更新列表") },
+                                        modifier = Modifier.semantics { contentDescription = "更新列表" },
+                                        navId = SecondaryAction,
+                                        contentKey = StarterGlyph.Refresh,
+                                    ) { StarterIcon(StarterGlyph.Refresh) }
+                                }
+                            },
+                            onRefresh = {
+                                // Local UI example only; replace with your repository's suspend reload operation.
+                                delay(450)
+                                refreshes++
+                            },
+                        ) {
+                            item {
+                                MochiBlurText(if (editing) "正在编辑" else "选择一项查看详情", style = MochiTheme.textStyles.bodyLarge)
                             }
-                        },
-                    ) {
-                        item {
-                            MochiListCard {
-                                MochiListRow("打开次数", trailing = { MochiCounterText(visits) })
+                            item {
+                                MochiListCard {
+                                    // 侧推到详情，返回按钮和右侧操作在共享顶栏里变形
+                                    MochiListRow(
+                                        "示例项目",
+                                        chevron = true,
+                                        status = { MochiListStatusChip("示例") },
+                                        onClick = {
+                                            visits++
+                                            stack.add(StarterDetail)
+                                        },
+                                    )
+                                    MochiListRow("打开次数", trailing = { MochiCounterText(visits) })
+                                    MochiListRow("刷新次数", trailing = { MochiCounterText(refreshes) })
+                                    // Choose before pushing: the shared toolbar morphs into the selected variant.
+                                    MochiListRow("详情使用文字按钮", trailing = { MochiSwitch(textAction, { textAction = it }) })
+                                }
                             }
                         }
-                        // Visibility already animates occupied height. Do not add a second height spring.
-                        item {
-                            MochiListCard(animateHeight = false) {
-                                MochiListRow("展开说明", trailing = { MochiSwitch(expanded, { expanded = it }) })
-                                MochiBlurVisibility(expanded) {
-                                    Column(
-                                        Modifier.padding(horizontal = 22.dp, vertical = 12.dp),
-                                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                                    ) {
-                                        Text("卡片与内容一起平滑改变高度。", style = MochiTheme.textStyles.bodyLarge)
-                                        Text("标题和数字分别使用模糊替换、计数器过渡。", style = MochiTheme.textStyles.bodyMedium)
+                    }
+
+                    entry<StarterDetail> {
+                        MochiLazyLargeTitleScaffold(
+                            title = "详情",
+                            navigationIcon = back,
+                            actions = {
+                                // Both variants match the list group's primary content; shapes pair by position.
+                                if (textAction) {
+                                    MochiBarButton("完成", onClick = {
+                                        toast.show("已保存")
+                                        stack.removeAt(stack.lastIndex)
+                                    }, navId = PrimaryAction)
+                                } else {
+                                    MochiBarIconButton(
+                                        onClick = {
+                                            toast.show("已保存")
+                                            stack.removeAt(stack.lastIndex)
+                                        },
+                                        modifier = Modifier.semantics { contentDescription = "完成" },
+                                        navId = PrimaryAction,
+                                        contentKey = StarterGlyph.Check,
+                                    ) { StarterIcon(StarterGlyph.Check) }
+                                }
+                            },
+                        ) {
+                            item {
+                                MochiListCard {
+                                    MochiListRow("打开次数", trailing = { MochiCounterText(visits) })
+                                }
+                            }
+                            // Visibility already animates occupied height. Do not add a second height spring.
+                            item {
+                                MochiListCard(animateHeight = false) {
+                                    MochiListRow("展开说明", trailing = { MochiSwitch(expanded, { expanded = it }) })
+                                    MochiBlurVisibility(expanded) {
+                                        Column(
+                                            Modifier.padding(horizontal = 22.dp, vertical = 12.dp),
+                                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                                        ) {
+                                            Text("卡片与内容一起平滑改变高度。", style = MochiTheme.textStyles.bodyLarge)
+                                            Text("标题和数字分别使用模糊替换、计数器过渡。", style = MochiTheme.textStyles.bodyMedium)
+                                        }
                                     }
                                 }
                             }
                         }
                     }
-                }
-            }
+                },
+            )
             // Keep the host and its state alive across navigation. It is not registered as toolbar content.
             MochiToastHost(toast)
         }
     }
 }
 
-private fun starterTitle(route: String): String = when (route) {
-    Home -> "首页"
-    ListRoute -> "列表"
-    Detail -> "详情"
-    else -> route
+private fun starterTitle(key: NavKey): String = when (key) {
+    StarterHome -> "首页"
+    is StarterList -> "列表"
+    StarterDetail -> "详情"
+    else -> key.toString()
 }
 
 private enum class StarterGlyph { Edit, Check, Refresh }

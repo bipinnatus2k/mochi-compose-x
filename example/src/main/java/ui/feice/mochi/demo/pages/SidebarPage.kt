@@ -33,8 +33,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.navigation3.runtime.NavBackStack
+import androidx.navigation3.runtime.NavKey
+import androidx.navigation3.runtime.entryProvider
 import ui.feice.mochi.basic.MochiBarIconButton
 import ui.feice.mochi.basic.Text
+import ui.feice.mochi.demo.ChatRoot
+import ui.feice.mochi.demo.ChatSettings
 import ui.feice.mochi.demo.catalog.CatalogEntry
 import ui.feice.mochi.demo.common.DemoChatBubble
 import ui.feice.mochi.demo.common.DemoComposerRow
@@ -48,10 +53,10 @@ import ui.feice.mochi.effect.mask.mochiScrollEdgeBlur
 import ui.feice.mochi.list.MochiListRow
 import ui.feice.mochi.list.MochiListSection
 import ui.feice.mochi.list.MochiListSectionFooter
+import ui.feice.mochi.navigation.LocalMochiNavBackStack
 import ui.feice.mochi.navigation.MochiBackButton
 import ui.feice.mochi.navigation.MochiLazyCompactTitleScaffold
 import ui.feice.mochi.navigation.MochiNavHost
-import ui.feice.mochi.navigation.MochiNavigator
 import ui.feice.mochi.navigation.MochiScrollEdgeDefaults
 import ui.feice.mochi.navigation.MochiSidebarHeader
 import ui.feice.mochi.navigation.MochiSidebarHeaderButton
@@ -62,7 +67,6 @@ import ui.feice.mochi.navigation.MochiSidebarSectionHeader
 import ui.feice.mochi.navigation.MochiSidebarStyle
 import ui.feice.mochi.navigation.MochiTitleBar
 import ui.feice.mochi.navigation.MochiTitleBarDefaults
-import ui.feice.mochi.navigation.rememberMochiNavigator
 import ui.feice.mochi.navigation.rememberMochiSidebarState
 import ui.feice.mochi.theme.MochiDefaults
 import ui.feice.mochi.theme.MochiTheme
@@ -92,9 +96,9 @@ private val Chats = listOf(
  */
 @Composable
 fun SidebarPage(entry: CatalogEntry, modifier: Modifier = Modifier) {
-    val outer = MochiNavigator.current
+    val outer = LocalMochiNavBackStack.current
     val sidebar = rememberMochiSidebarState()
-    val nav = rememberMochiNavigator("chat")
+    val stack = remember { NavBackStack<NavKey>(ChatRoot) }
     var style by rememberSaveable { mutableStateOf(MochiSidebarStyle.Push) }
     var current by rememberSaveable { mutableIntStateOf(0) }
     var query by rememberSaveable { mutableStateOf("") }
@@ -137,28 +141,30 @@ fun SidebarPage(entry: CatalogEntry, modifier: Modifier = Modifier) {
                 "小果",
                 onClick = {
                     sidebar.close()
-                    if (nav.current != "settings") nav.push("settings")
+                    if (stack.lastOrNull() != ChatSettings) stack.add(ChatSettings)
                 },
                 subtitle = "设置与侧边栏样式",
             )
             MochiSidebarItem(
                 "退出示例",
-                onClick = { outer?.pop() },
+                onClick = { outer?.let { it.removeAt(it.lastIndex) } },
                 leading = { Glyph(DemoIcons.BACK, cs.onSurfaceVariant, size = 18) },
             )
         },
     ) {
-        MochiNavHost(nav) { route ->
-            when (route) {
-                "settings" -> SidebarSettings(style) { style = it }
-
-                else -> ChatScreen(
-                    chat = Chats.getOrNull(current),
-                    onMenu = { sidebar.open() },
-                    onNew = { current = -1 },
-                )
-            }
-        }
+        MochiNavHost(
+            backStack = stack,
+            entryProvider = entryProvider {
+                entry<ChatRoot> {
+                    ChatScreen(
+                        chat = Chats.getOrNull(current),
+                        onMenu = { sidebar.open() },
+                        onNew = { current = -1 },
+                    )
+                }
+                entry<ChatSettings> { SidebarSettings(style) { style = it } }
+            },
+        )
     }
 }
 

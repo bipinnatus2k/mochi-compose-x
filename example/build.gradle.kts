@@ -3,8 +3,9 @@
 
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    // 页面 key 的进程级保存走 Navigation 3 的 rememberNavBackStack（@Serializable key）
+    alias(libs.plugins.kotlin.serialization)
 }
 
 // release 签名：优先读环境变量（CI 里来自仓库 Secrets，或工作流临时生成的 keystore），都没有就退回 debug 签名
@@ -13,13 +14,13 @@ val signingStore = System.getenv("GOO_STORE_FILE")?.let { file(it) }?.takeIf { i
 
 android {
     namespace = "ui.feice.mochi.demo"
-    compileSdk = 36
+    compileSdk = 37
     // Performance comparisons run instrumentation against the actual release app.
     testBuildType = providers.gradleProperty("mochiTestBuildType").orElse("debug").get()
 
     defaultConfig {
         applicationId = "ui.feice.mochi.demo"
-        minSdk = 23
+        minSdk = 24
         targetSdk = 35
         versionCode = (System.getenv("GOO_VERSION_CODE") ?: property("EXAMPLE_VERSION_CODE").toString()).toInt()
         versionName = "0.1.$versionCode"
@@ -57,7 +58,12 @@ android {
     androidResources { noCompress += "dict" }
 
     // 键盘演示只在本地检出里有 mochi-keyboard 时编进来（公开仓库和 CI 没有这个模块）
-    sourceSets["main"].java.srcDir(if (withKeyboard) "src/keyboard/java" else "src/nokeyboard/java")
+    // AGP 9 内置 Kotlin：Kotlin 源码目录走 variant API 挂到 kotlin 源集（挂 java 源集不再编译 Kotlin）
+    androidComponents {
+        onVariants { variant ->
+            variant.sources.kotlin?.addStaticSourceDirectory(if (withKeyboard) "src/keyboard/java" else "src/nokeyboard/java")
+        }
+    }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

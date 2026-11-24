@@ -78,8 +78,8 @@ import ui.feice.mochi.effect.glass.engine.GlassBody
 import ui.feice.mochi.effect.glass.engine.rememberGlassGlowState
 import ui.feice.mochi.effect.glass.mochiLayerBackdrop
 import ui.feice.mochi.effect.glass.rememberMochiCombinedBackdrop
+import ui.feice.mochi.navigation.LocalMochiNavEngine
 import ui.feice.mochi.navigation.LocalMochiNavEntry
-import ui.feice.mochi.navigation.LocalMochiNavigator
 import ui.feice.mochi.navigation.mochiNavOccluder
 import ui.feice.mochi.navigation.rememberMochiNavCarriedBackdrop
 import ui.feice.mochi.navigation.rememberMochiNavCoverBackdrop
@@ -178,7 +178,7 @@ internal fun MochiGlassTabBar(
     val barBounds = remember { android.graphics.Rect() }
     val sampleGap = with(density) { 8.dp.roundToPx() }
     val sampleHeight = with(density) { 16.dp.roundToPx() }
-    val navigator = LocalMochiNavigator.current
+    val navigator = LocalMochiNavEngine.current
     val navEntry = LocalMochiNavEntry.current
 
     // 「从来源打开」的页正盖上来时，玻璃要透过变形中的容器每帧重算（rememberMochiNavCoverBackdrop）。

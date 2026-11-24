@@ -59,7 +59,7 @@ import ui.feice.mochi.basic.MochiSegmentedControl
 import ui.feice.mochi.basic.MochiSegmentedDefaults
 import ui.feice.mochi.basic.Text
 import ui.feice.mochi.demo.catalog.CatalogEntry
-import ui.feice.mochi.demo.routeTitle
+import ui.feice.mochi.demo.keyTitle
 import ui.feice.mochi.effect.content.mochiAnimateHeight
 import ui.feice.mochi.effect.content.mochiBlurReveal
 import ui.feice.mochi.effect.glass.mochiBackdropSource
@@ -160,7 +160,7 @@ internal fun DemoPage(
         // 用库的 MochiTitleBar：自己拼顶栏时玻璃返回按钮的描边会透出没叠渐隐的正文
         MochiTitleBar(
             title = entry.title,
-            navigationIcon = { MochiBackButton(history = ::routeTitle) },
+            navigationIcon = { MochiBackButton(history = ::keyTitle) },
             barHeight = TopBarHeight,
             // 大标题钻到顶栏下面以后模糊淡入（iOS 26）
             titleProgress = { if (titleBottom0 <= 0f) 0f else 1f - smoothstep(-0.1f, 0.5f, titleUnder()) },

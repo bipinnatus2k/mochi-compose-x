@@ -35,28 +35,26 @@ Button(onClick = { sheet.show() })
 | color | 面板颜色，默认 `MochiDefaults.sheetBackground()`：浮起一层的分组底色（iOS elevated 层级的 `systemGroupedBackground`）。面板里 `LocalMochiElevated` 为 true，`MochiListCard` 换成 elevated 的卡片色，浅色、深色下都和面板差一档，不会融成一片 |
 | grabber | 顶上的小横条 |
 | hideNavigationBar | 默认 true，控制半屏时隐藏系统导航图标；不影响透明背景策略 |
-| navigator | 与内部 `MochiNavHost` 相同的导航器，返回优先交给面板内页面 |
+| backStack | 与内部 `MochiNavHost` 相同的返回栈（Navigation 3 的 `NavBackStack`），返回优先交给面板内页面 |
 
 ## 面板内导航
 
 示例归在「导航」分类，包含「加入网络 → 高级设置 → IP 设置」以及「安全性」页面。
 
 ```kotlin
-val nav = rememberMochiNavigator("network")
-MochiSheet(sheet, navigator = nav) {
+val stack = rememberNavBackStack(SheetRoot)
+MochiSheet(sheet, backStack = stack) {
     MochiNavHost(
-        nav,
+        backStack = stack,
         // corners 留空：自动继承面板当前转场圆角
         spec = MochiNavDefaults.spec(pushBackdrop = MochiDefaults.sheetBackground()),
-    ) { route ->
-        // 每页包含 MochiSheetHeader 和自己的内容。
-        // 各页顶栏按钮复用 navId="sheet.leading" / "sheet.trailing"。
-    }
+        entryProvider = entryProvider { entry<SheetRoot> { … } entry<SheetAdvanced> { … } },
+    )
 }
-nav.push("advanced") // 不传来源，使用侧推和共享顶栏按钮
+stack.add(SheetAdvanced) // 不带来源，使用侧推和共享顶栏按钮
 ```
 
-面板使用独立导航器，并传给两个组件，避免面板的返回处理抢走内部返回。最后一个子页仍在退出动画中时，重复返回也会被接住，不会误关面板；根页停稳后返回才关闭面板。示例中根页的关闭/确认圆按钮在内部页面变成返回图标和「完成」胶囊，操作只退一级；关闭重开时从根页开始。
+面板和内部主机用同一个返回栈，避免面板的返回处理抢走内部返回。最后一个子页仍在退出动画中时，重复返回也会被接住，不会误关面板；根页停稳后返回才关闭面板。示例中根页的关闭/确认圆按钮在内部页面变成返回图标和「完成」胶囊，操作只退一级；关闭重开时从根页开始。
 
 内部 `MochiNavHost` 默认继承面板当前轮廓，沿用已有侧推/返回的圆角裁切和边缘阴影。半屏侧推保留四角；全屏补底生效时只保留顶部两角，底部两角为 0，避免侧推切出导航区缺口；上拉回弹仍沿用该规则。圆角在绘制阶段读取，不因拖动逐帧重组。不要传 `MochiScreenCorners.None`，它会显式关闭这层转场圆角。静止时仍由面板外壳裁切，没有额外静态圆角层。
 

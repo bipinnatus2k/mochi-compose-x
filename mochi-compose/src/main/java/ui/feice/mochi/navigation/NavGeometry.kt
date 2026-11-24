@@ -52,7 +52,7 @@ internal class TopFrame(
 internal class SourceInfo(val rect: Rect, val radius: Float, val color: Color)
 
 @Stable
-internal class NavGeometry(val nav: MochiNavigator) {
+internal class NavGeometry(val nav: MochiNavEngine) {
     var size by mutableStateOf(Size.Zero)
     lateinit var spec: MochiNavSpec
     var defaultCorners: MochiScreenCorners = MochiScreenCorners.None

@@ -27,7 +27,7 @@ import ui.feice.mochi.effect.glass.motionKey
  */
 @Composable
 internal fun rememberMochiNavCoverBackdrop(): Backdrop? {
-    val nav = LocalMochiNavigator.current ?: return null
+    val nav = LocalMochiNavEngine.current ?: return null
     val entry = LocalMochiNavEntry.current ?: return null
     DisposableEffect(entry) {
         entry.coverReaderCount++
@@ -36,7 +36,7 @@ internal fun rememberMochiNavCoverBackdrop(): Backdrop? {
     return remember(nav, entry) { NavCoverBackdrop(nav, entry) }
 }
 
-private class NavCoverBackdrop(private val nav: MochiNavigator, private val entry: MochiNavEntry) :
+private class NavCoverBackdrop(private val nav: MochiNavEngine, private val entry: MochiNavEntry) :
     Backdrop,
     MotionKeyedBackdrop {
     override val isCoordinatesDependent: Boolean = true
@@ -66,12 +66,12 @@ private class NavCoverBackdrop(private val nav: MochiNavigator, private val entr
  */
 @Composable
 internal fun rememberMochiNavCarriedBackdrop(inner: Backdrop): Backdrop {
-    val nav = LocalMochiNavigator.current ?: return inner
+    val nav = LocalMochiNavEngine.current ?: return inner
     val entry = LocalMochiNavEntry.current ?: return inner
     return remember(nav, entry, inner) { CarriedBackdrop(inner, nav, entry) }
 }
 
-private class CarriedBackdrop(private val inner: Backdrop, private val nav: MochiNavigator, private val entry: MochiNavEntry) :
+private class CarriedBackdrop(private val inner: Backdrop, private val nav: MochiNavEngine, private val entry: MochiNavEntry) :
     Backdrop,
     MotionKeyedBackdrop {
     override val isCoordinatesDependent: Boolean = true

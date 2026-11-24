@@ -8,14 +8,14 @@
 
 | 场景 | 必用能力与接入方式 | 常见漏项 |
 |---|---|---|
-| 应用根部 | `MochiTheme` 提供主题（配色、控件配色、材质都在根部给一次，见下面「主题接入」；最外层主题自动让状态栏、导航栏图标跟着明暗走）；`ProvideMochiOverscroll` 包住滚动内容；`rememberMochiNavigator` + `MochiNavHost` 管理 Mochi 页面栈 | 只替换按钮，其他页面仍用默认 Material 外观；导航容器不在主题里 |
+| 应用根部 | `MochiTheme` 提供主题（配色、控件配色、材质都在根部给一次，见下面「主题接入」；最外层主题自动让状态栏、导航栏图标跟着明暗走）；`ProvideMochiOverscroll` 包住滚动内容；`rememberNavBackStack` + `MochiNavHost` 管理 Mochi 页面栈（Navigation 3，key 类型安全） | 只替换按钮，其他页面仍用默认 Material 外观；导航容器不在主题里 |
 | 大标题、搜索、下拉刷新 | `MochiLargeTitleScaffold`、`MochiSearchBar`；按业务提供挂起的 `onRefresh` | 自画顶栏遗漏折叠标题、边缘效果或刷新；重复包一层竖向滚动 |
 | 正文有卡片外分组小标题 | 如「配色」「主题色板」，默认用 `MochiCompactTitleScaffold`（已有滚动容器用 `MochiTitleBar`），移除独立大标题与空占位，保留分组小标题；仅独立顶栏需正文预留状态栏 + 顶栏高度；介绍卡片内标题保留 | 按说明文字或卡片有无判断；误删分组标题；重复安全区 |
 | 长页面（一屏放不下） | `MochiLazyLargeTitleScaffold` / `MochiLazyCompactTitleScaffold` 或 `LazyColumn` + `MochiTitleBar`，每个分组一项，行很多的分组用 `mochiListSection`（每行一项、看起来仍是一张卡片），项内可改状态用 `rememberSaveable`；页面里嵌的滚动区域挂 `mochiContainedScroll` | 长页面用 `Column` + `verticalScroll`，滚动卡在主线程；整页塞进一项；一行套一张卡片；项里状态用 `remember`，滑回来丢了 |
 | 无上述分组小标题的目录首页 | 保留大标题，初始展开，上滑折叠到顶栏，回到顶部展开；各标签独立保存位置 | 强制初始折叠；删除大标题；额外补空白 |
-| 普通列表到详情的侧推 | `nav.push(route)`，两页使用库的顶栏控件并登记稳定 `navId` | 按钮看起来像 Mochi，但跟页面一起滑走 |
-| 卡片打开整页 | 整张来源卡片标 `mochiNavSource`，使用相同来源 key 调用 `push(route, from = key)` | 所有页面都带 `from`；继续使用废弃的 `mochiSharedElement` |
-| 返回 | `MochiBackButton` 默认执行当前导航器的 `pop`，不在导航主机里或已在第一页时交给系统返回（关面板、退出 Activity）；需要历史时传 `history` 路由标题映射 | 在页面再装一个竞争的返回处理器；把返回按钮重画成普通点击图标 |
+| 普通列表到详情的侧推 | `stack.add(key)`，两页使用库的顶栏控件并登记稳定 `navId` | 按钮看起来像 Mochi，但跟页面一起滑走 |
+| 卡片打开整页 | 整张来源卡片标 `mochiNavSource`，key 带上相同来源（`mochiSource`）再 `stack.add(key)` | 所有页面都带 `from`；继续使用废弃的 `mochiSharedElement` |
+| 返回 | `MochiBackButton` 默认退所在返回栈，不在导航主机里或已在第一页时交给系统返回（关面板、退出 Activity）；需要历史时传 `history` 的 key 标题映射 | 在页面再装一个竞争的返回处理器；把返回按钮重画成普通点击图标 |
 | 顶栏一组操作 | 同一栏里挨着的两个及以上操作一律放进 `MochiBarGroup`：普通操作用 `MochiBarGroupItem`，弹菜单的用 `MochiBarGroupDropdownItem`（菜单从组的胶囊长出来）；只有一个操作才用单独的 `MochiBarIconButton` / `MochiBarIconDropdown`；组与子项分别登记形状和内容 | 几个独立圆按钮并排；只给组 ID、不给子项 ID；给每页加路由前缀导致内容永远配不上 |
 | 正文里并排的按钮 | 挨着的两个及以上按钮放进 `MochiButtonGroup`：按下的那个和邻居用融球颈连起来，玻璃和纯色按钮可以混排 | 用 `Row` + `spacedBy` 排几个独立按钮，按下时互不相干 |
 | 页面里有 WebView | 栏的玻璃不取样 WebView：WebView 放在 `mochiBackdropSource` 外面，取样来源里放网页截图；`MochiNavHost(windowGlass = false)`，菜单、面板外面包一层 `LocalMochiBackdrop` 提供这份来源（仍是玻璃） | WebView 进了玻璃的取样来源，Vulkan 渲染的机器上渲染线程崩溃（毛玻璃、液态玻璃、玻璃菜单都会） |
@@ -23,7 +23,7 @@
 | 一整块区域不要玻璃（比如带 WebView 的页面） | `MochiMaterialsScope(MochiMaterials()) { … }`：只换这一块的材质，配色、字体不动 | 在这块里再包一层 `MochiTheme` 重设所有主题；页面里按玻璃开关写分支 |
 | 栏里单个弹菜单的按钮（「⋯」） | `MochiBarIconDropdown`：44dp 圆，和 `MochiBarIconButton` 同材质；和栏按钮同一排的搜索框用 `MochiGlassSurface`，纯色时两者同色 | 只放一项的 `MochiBarGroup`（椭圆）；同一排的搜索框和按钮高度、底色各写一套 |
 | 底部标签栏 | 根页用 `MochiTabScaffold`：各标签保存状态与位置、再点当前标签回顶、正文底部自动让出标签栏、推入新页时收起；程序切标签用 `rememberMochiTabScaffoldState().select(i)`。只有特殊布局才直接用 `MochiTabBar` + `mochiHideWhenCovered` | 手写 `when (tab)` 切页丢滚动位置；列表末尾手写 `Spacer(112.dp)`；回顶只接了部分标签 |
-| 多页面板 | 独立导航器同时传入 `MochiSheet` 与内层 `MochiNavHost`；内部省略 `corners` 自动继承面板转场圆角（全屏底部直角），并使用 `MochiSheetHeader` | 返回先关面板；强制 None 导致侧推无圆角；内部顶栏未登记共享 |
+| 多页面板 | 同一个返回栈同时传入 `MochiSheet` 与内层 `MochiNavHost`；内部省略 `corners` 自动继承面板转场圆角（全屏底部直角），并使用 `MochiSheetHeader` | 返回先关面板；强制 None 导致侧推无圆角；内部顶栏未登记共享 |
 | 分组内容 | 页面用 `groupedBackground`，卡片优先 `MochiListSection` / `MochiListCard`、设置及键值行用 `MochiListRow`（尺寸照 iOS 26） | 自画灰白底色；通用卡片 padding 再套裸 Row，绕过文字缩进与行高规则 |
 | 状态标记 | 未读小点进 `titleTrailing`；置顶等具名状态用右下角 `status` 中的 `MochiListStatusChip` | 所有状态都挤到标题旁；日期被 chip 顶走 |
 | 操作与菜单 | 复用 `MochiButton`、`MochiIconButton`、`MochiDropdown`、`MochiIconDropdown`、`MochiContextMenu` | 自拼背景 + clickable，漏掉按压、取消、长按滑选或返回历史菜单 |
@@ -139,7 +139,7 @@ fun AppTheme(style: AppStyle, dark: Boolean, glass: Boolean, blur: Boolean, cont
 
 ### 依赖与 Activity 配置
 
-按 [README](../../../README.zh-CN.md#安装) 添加依赖，版本用已发布的版本（见 Maven Central 徽章）。库本身用 compileSdk 36、minSdk 23、Kotlin 2.3.0 加 Compose 编译器插件、Java 17 构建。
+按 [README](../../../README.zh-CN.md#安装) 添加依赖，版本用已发布的版本（见 Maven Central 徽章）。库本身用 compileSdk 37、minSdk 24、Kotlin 2.3.0 加 Compose 编译器插件、Java 17 构建。页面栈建在 [Navigation 3](https://developer.android.com/guide/navigation/navigation-3)（`androidx.navigation3`）上：key 是类型安全的 `NavKey` 数据类，要进程重建恢复就标注 `@Serializable`。
 
 骨架需要这些依赖：
 
@@ -147,8 +147,8 @@ fun AppTheme(style: AppStyle, dark: Boolean, glass: Boolean, blur: Boolean, cont
 dependencies {
     implementation("io.github.feice11:mochi-compose:<版本>")
     implementation("io.github.feice11:mochi-icons:<版本>") // 和 mochi-compose 同一个版本
-    implementation("androidx.activity:activity-compose:1.10.1")
-    implementation("androidx.core:core-ktx:1.15.0")
+    implementation("androidx.activity:activity-compose:1.13.0")
+    implementation("androidx.core:core-ktx:1.17.0")
 }
 ```
 

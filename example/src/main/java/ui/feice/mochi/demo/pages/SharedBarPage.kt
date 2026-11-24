@@ -23,6 +23,7 @@ import ui.feice.mochi.basic.MochiBarGroupDropdownItem
 import ui.feice.mochi.basic.MochiBarGroupItem
 import ui.feice.mochi.basic.MochiBarIconButton
 import ui.feice.mochi.basic.MochiItem
+import ui.feice.mochi.demo.SharedBarStep
 import ui.feice.mochi.demo.catalog.CatalogEntry
 import ui.feice.mochi.demo.common.Code
 import ui.feice.mochi.demo.common.DemoIcons
@@ -32,28 +33,28 @@ import ui.feice.mochi.demo.common.Glyph
 import ui.feice.mochi.demo.common.MoreDots
 import ui.feice.mochi.demo.common.Tone
 import ui.feice.mochi.demo.common.demoItem
-import ui.feice.mochi.demo.routeTitle
+import ui.feice.mochi.demo.keyTitle
 import ui.feice.mochi.list.MochiListSection
 import ui.feice.mochi.list.MochiListSectionFooter
+import ui.feice.mochi.navigation.LocalMochiNavBackStack
 import ui.feice.mochi.navigation.MochiBackButton
 import ui.feice.mochi.navigation.MochiLazyCompactTitleScaffold
-import ui.feice.mochi.navigation.MochiNavigator
 import ui.feice.mochi.theme.MochiTheme
 
 /** 共享顶栏按钮演示入口 */
 @Composable
 fun SharedBarPage(entry: CatalogEntry, modifier: Modifier = Modifier) {
-    val nav = MochiNavigator.current
+    val stack = LocalMochiNavBackStack.current
     val scope = rememberCoroutineScope()
     DemoPage(entry, modifier) {
         demoItem {
             MochiListSection(header = "推进去看") {
-                PushRow("收件箱", DemoIcons.SHARE, Tone.Primary) { nav?.push("bar/0") }
+                PushRow("收件箱", DemoIcons.SHARE, Tone.Primary) { stack?.add(SharedBarStep(0)) }
                 // 不等上一页推完，几页同时转场时顶栏也要连续
                 PushRow("快速连推到最后一页", DemoIcons.PLUS, Tone.Secondary) {
                     scope.launch {
                         for (i in SharedSteps.indices) {
-                            nav?.push("bar/$i")
+                            stack?.add(SharedBarStep(i))
                             delay(150)
                         }
                     }
@@ -71,20 +72,20 @@ fun SharedBarPage(entry: CatalogEntry, modifier: Modifier = Modifier) {
 /** 共享顶栏按钮的一页（路由 "bar/序号"） */
 @Composable
 fun SharedBarStepPage(step: Int, modifier: Modifier = Modifier) {
-    val nav = MochiNavigator.current
+    val stack = LocalMochiNavBackStack.current
     val s = SharedSteps[step.coerceIn(0, SharedSteps.lastIndex)]
     MochiLazyCompactTitleScaffold(
         title = s.title,
         modifier = modifier,
         subtitle = s.note,
-        navigationIcon = { MochiBackButton(history = ::routeTitle) },
+        navigationIcon = { MochiBackButton(history = ::keyTitle) },
         actions = { StepActions(s.layout) },
     ) {
         demoItem {
             if (step < SharedSteps.lastIndex) {
                 MochiListSection(header = "顶栏") {
                     val next = SharedSteps[step + 1]
-                    PushRow("推入「${next.title}」", DemoIcons.TRANSITION, Tone.Primary) { nav?.push("bar/${step + 1}") }
+                    PushRow("推入「${next.title}」", DemoIcons.TRANSITION, Tone.Primary) { stack?.add(SharedBarStep(step + 1)) }
                 }
             } else {
                 MochiListSectionFooter("用返回手势拖一半再松开。")

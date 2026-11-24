@@ -1,23 +1,20 @@
 // Copyright 2026, mochi-compose contributors
 // SPDX-License-Identifier: Apache-2.0
 
+@file:Suppress("ktlint:compose:compositionlocal-allowlist") // LocalMochiNavEngine/LocalMochiNavEntry/LocalMochiNavEngineSlot：库内部通道
+
 package ui.feice.mochi.navigation
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.Stable
-import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.Saver
-import androidx.compose.runtime.saveable.listSaver
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.geometry.Rect
@@ -25,86 +22,55 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.layer.GraphicsLayer
 import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.navigation3.runtime.NavBackStack
+import androidx.navigation3.runtime.NavEntry
+import androidx.navigation3.runtime.NavKey
 import ui.feice.mochi.utils.smoothstep
 
 /**
- * 页面返回栈。路由是 String，保存在 rememberSaveable 里（旋转屏幕、进程重建后还在）。
- * 配合 [MochiNavHost] 显示；用 [rememberMochiNavigator] 创建。
- *
- * ```kotlin
- * val nav = rememberMochiNavigator("home")
- * MochiNavHost(nav) { route -> … }
- * nav.push("detail", from = "card-1")   // 从带 mochiNavSource("card-1") 的卡片「打开应用」式展开
- * nav.pop()
- * ```
+ * 转场引擎：包着应用的 [NavBackStack]（Navigation 3 的逻辑栈），管视觉上滞后于它的页面栈、
+ * 来源/遮挡物/收起栏/共享顶栏的登记表，和转场几何。逻辑栈由应用（或 [MochiNavHost] 的返回处理）直接改，
+ * 引擎在 [MochiNavScene] 的场景内容里对比逻辑栈和可视条目，按 push / pop 的形状编排转场（见 MochiNavSync.kt）。
  */
 @Stable
-public class MochiNavigator internal constructor(root: String, restored: List<MochiNavEntry>?, nextId: Int) {
+internal class MochiNavEngine(internal val stack: NavBackStack<NavKey>) {
+
+    /** 可视条目：逻辑栈上的页 + 正在关闭（pop 了但还在演退场动画）的页 + 排队等关闭的页 */
     internal val entries = mutableStateListOf<MochiNavEntry>()
-    internal var nextId: Int = nextId
-        private set
 
-    init {
-        if (restored.isNullOrEmpty()) entries += MochiNavEntry(this.nextId++, root, null, opened = true) else entries += restored
-    }
+    /** 最新一轮 entryProvider 生成的条目（宿主包一层登记），sync 用它把栈上的 key 配到 Nav3 条目 */
+    internal val entryLog = mutableStateMapOf<NavKey, NavEntry<NavKey>>()
 
-    /** 当前返回栈（不含正在关闭的页） */
-    public val backStack: List<String> get() = entries.filter { !it.closing }.map { it.route }
+    /** 上一次 sync 看到的逻辑栈，用来 diff 出 push / pop（见 MochiNavSync.kt） */
+    internal var lastKeys: List<NavKey> = stack.toList()
 
-    /** 最上面（没在关闭）的路由 */
-    public val current: String get() = entries.last { !it.closing }.route
+    /** 排队中的返回（来源页还在变形时 pop 又来了：等它关完再关这一页） */
+    internal val pending = ArrayDeque<MochiNavEntry>()
 
-    /** 能不能返回（栈里除了根还有页） */
-    public val canPop: Boolean get() = entries.count { !it.closing } > 1
+    /** 能不能返回（可视栈里除了根还有页） */
+    internal val canPop: Boolean get() = entries.count { !it.closing } > 1
 
     /** 有页面正在打开、拖动返回或关闭 */
-    public val isTransitioning: Boolean get() = entries.any { it.inTransition }
+    internal val isTransitioning: Boolean get() = entries.any { it.inTransition }
 
-    /**
-     * 打开一页。
-     * @param from 来源元素的 key（[mochiNavSource]）。给了就从那个元素「打开应用」式地长成整页，关闭时缩回去；
-     *   不给就是 iOS 的侧推转场（新页从右边推进来，下层页往左退一点）
-     */
-    public fun push(route: String, from: String? = null) {
-        pendingPops = 0
-        // 正在退出的页、又要进同一页（同一个来源）：直接让它掉头，从当前位置和速度连续地回来，不新开一页
-        val leaving = entries.asReversed().takeWhile { it.closing }.firstOrNull { it.source == from && it.route == route }
-        if (leaving != null) {
-            leaving.closing = false
-            return
-        }
-        // 侧推的页正在退出、又推入别的页：两个转场同时进行（退出的那页接着滑走，新页从右边进来），不瞬间删掉；
-        // 涉及「从来源打开」的页没法同时变形，正在关闭的页直接结束
-        if (from != null || entries.any { it.closing && it.source != null }) entries.removeAll { it.closing }
-        entries += MochiNavEntry(nextId++, route, from, opened = false)
+    /** 打开一页：key 直接进逻辑栈，转场由 sync 编排 */
+    internal fun push(key: NavKey) {
+        stack.add(key)
     }
 
-    /**
-     * 返回上一页（带转场）。栈里只剩根时返回 false。
-     *
-     * 连续返回不会被吞掉、也不会跳：上一页还在侧推退出时，下面这页直接跟着一起退出（两页同时滑走，位置连续）；
-     * 涉及「从来源打开」的页（没法和别的页同时变形）时排队，上一页一关完就接着关
-     */
-    public fun pop(): Boolean {
-        val open = entries.filter { !it.closing }
-        if (open.size <= 1) return false
-        val leaving = entries.lastOrNull()?.takeIf { it.closing }
-        if (leaving != null && (leaving.source != null || open.last().source != null)) {
-            pendingPops++
-            return true
-        }
-        open.last().closing = true
+    /** 返回上一页（带转场）。逻辑栈里只剩根时返回 false */
+    internal fun pop(): Boolean {
+        if (stack.size <= 1) return false
+        stack.removeAt(stack.lastIndex)
         return true
     }
 
-    /** 排队中的返回次数（见 [pop]） */
-    internal var pendingPops = 0
-
-    /** 一页关完后调用：有排队的返回就接着执行 */
-    internal fun onClosed() {
-        if (pendingPops > 0) {
-            pendingPops--
-            pop()
+    /** 一页的关闭动画走完：把它从可视栈摘掉，有排队的返回就接着关下一页 */
+    internal fun onClosed(entry: MochiNavEntry) {
+        entries.remove(entry)
+        if (pending.isNotEmpty()) {
+            val next = pending.removeFirst()
+            if (next in entries && !next.closing) next.closing = true
         }
     }
 
@@ -139,31 +105,6 @@ public class MochiNavigator internal constructor(root: String, restored: List<Mo
     internal fun above(entry: MochiNavEntry): MochiNavEntry? {
         val i = entries.indexOf(entry)
         return if (i >= 0 && i < entries.size - 1) entries[i + 1] else null
-    }
-
-    /**
-     * 返回到栈里第 [index] 页（0 = 根，按 [backStack] 的顺序）。侧推页面从各自当前位置一起退出。
-     * 返回 false：index 不在栈里，或者已经在那一页
-     */
-    public fun popTo(index: Int): Boolean {
-        val open = entries.filter { !it.closing }
-        if (index < 0 || index >= open.lastIndex) return false
-        pendingPops = 0
-        val exiting = entries.subList(entries.indexOf(open[index]) + 1, entries.size)
-        if (exiting.all { it.source == null }) {
-            exiting.forEach { it.closing = true }
-            return true
-        }
-        entries.removeAll { it.closing }
-        val top = entries.last()
-        // 中间的页移走；下面那页换成目标页时，它的状态由 SaveableStateHolder 恢复
-        while (entries.size > index + 2) entries.removeAt(index + 1)
-        top.closing = true
-        return true
-    }
-
-    internal fun remove(entry: MochiNavEntry) {
-        entries.remove(entry)
     }
 
     internal fun under(entry: MochiNavEntry): MochiNavEntry? {
@@ -239,7 +180,7 @@ public class MochiNavigator internal constructor(root: String, restored: List<Mo
 
     internal fun occludersOf(entry: MochiNavEntry): List<OccluderHandle> = occluders.filter { it.entry === entry && it.shown() }
 
-    // —— 收起的栏（mochiHideWhenCovered）：从来源打开时由 MochiNavHost 代画，下层页内容才能整页离屏缓存 ——
+    // —— 收起的栏（mochiHideWhenCovered）：从来源打开时由场景内容代画，下层页内容才能整页离屏缓存 ——
 
     private val hidden = ArrayList<HideHandle>()
 
@@ -254,7 +195,7 @@ public class MochiNavigator internal constructor(root: String, restored: List<Mo
     internal fun hiddenOf(entry: MochiNavEntry): List<HideHandle> = hidden.filter { it.entry === entry && it.shown() }
 
     /**
-     * 这一页正被一个「从来源打开」的页盖着、在转场中：页里收起的栏不在页面里画、由 MochiNavHost 代画（位移照常），
+     * 这一页正被一个「从来源打开」的页盖着、在转场中：页里收起的栏不在页面里画、由场景内容代画（位移照常），
      * 页面内容这段时间不变，可以整页画进离屏纹理只缩放
      */
     internal fun isCarriedUnderSource(entry: MochiNavEntry): Boolean {
@@ -268,7 +209,7 @@ public class MochiNavigator internal constructor(root: String, restored: List<Mo
      */
     internal fun isMovingOrCovered(entry: MochiNavEntry): Boolean = entry.inTransition || above(entry) != null
 
-    /** [c] 在这一页某个收起的栏里、而栏正由 MochiNavHost 代画时，栏此刻往下滑了多少（px）；否则 0 */
+    /** [c] 在这一页某个收起的栏里、而栏正由场景内容代画时，栏此刻往下滑了多少（px）；否则 0 */
     internal fun carriedShift(entry: MochiNavEntry, c: LayoutCoordinates): Float {
         if (!isCarriedUnderSource(entry)) return 0f
         for (h in hiddenOf(entry)) {
@@ -294,7 +235,7 @@ public class MochiNavigator internal constructor(root: String, restored: List<Mo
 
     private val bars = ArrayList<BarHandle>()
 
-    /** 登记表变了就加一，读它的绘制（按钮自己、MochiNavHost 的最上层）跟着重画 */
+    /** 登记表变了就加一，读它的绘制（按钮自己、场景内容的最上层）跟着重画 */
     private var barsVersion by mutableIntStateOf(0)
 
     internal fun registerBar(h: BarHandle) {
@@ -327,56 +268,45 @@ public class MochiNavigator internal constructor(root: String, restored: List<Mo
         return entries.subList(i, n).toList()
     }
 
-    /** 这个顶栏按钮所在的页在变形的那一串里：由 MochiNavHost 留在顶栏原位画，它自己的页里不画 */
+    /** 这个顶栏按钮所在的页在变形的那一串里：由场景内容留在顶栏原位画，它自己的页里不画 */
     internal fun isBarCarried(h: BarHandle): Boolean {
         val e = h.entry ?: return false
         val page = e.contentCoords ?: return false
         if (h.restRect(page) == null) return false
         return slideChain().any { it === e }
     }
-
-    public companion object {
-        /** 当前所在 [MochiNavHost] 的导航器，不在里面时是 null。页面里返回：`MochiNavigator.current?.pop()` */
-        public val current: MochiNavigator?
-            @Composable @ReadOnlyComposable
-            get() = LocalMochiNavigator.current
-
-        internal fun saver(root: String): Saver<MochiNavigator, Any> = listSaver<MochiNavigator, String>(
-            save = { nav ->
-                buildList {
-                    add(nav.nextId.toString())
-                    nav.entries.filter { !it.closing }.forEach {
-                        add(it.id.toString())
-                        add(it.route)
-                        add(it.source ?: "")
-                    }
-                }
-            },
-            restore = { list ->
-                val next = list[0].toInt()
-                val restored = list.drop(1).chunked(3).map { (id, route, source) ->
-                    MochiNavEntry(id.toInt(), route, source.ifEmpty { null }, opened = true)
-                }
-                MochiNavigator(root, restored, next)
-            },
-        )
-    }
 }
 
-/** 创建并记住一个导航器，root 是根路由（不能返回的那一页） */
-@Composable
-public fun rememberMochiNavigator(root: String): MochiNavigator =
-    rememberSaveable(root, saver = MochiNavigator.saver(root)) { MochiNavigator(root, null, 0) }
-
-/** 当前 [MochiNavHost] 的导航器 */
-internal val LocalMochiNavigator = staticCompositionLocalOf<MochiNavigator?> { null }
+/** 当前 [MochiNavHost] 的转场引擎 */
+internal val LocalMochiNavEngine = staticCompositionLocalOf<MochiNavEngine?> { null }
 
 /** 当前内容所在的页 */
 internal val LocalMochiNavEntry = staticCompositionLocalOf<MochiNavEntry?> { null }
 
-/** 栈里的一页和它的转场状态 */
+/**
+ * 面板（MochiSheet）读内层 [MochiNavHost] 转场状态的通道：面板在宿主外面，拿不到它的 CompositionLocal，
+ * 双方用同一个 backStack 对上（面板登记槽，宿主往里放引擎）。见 MochiSheet 的返回处理
+ */
+internal class MochiNavEngineSlot(val stack: NavBackStack<*>) {
+    var engine by mutableStateOf<MochiNavEngine?>(null)
+}
+
+internal val LocalMochiNavEngineSlot = staticCompositionLocalOf<MochiNavEngineSlot?> { null }
+
+/** 栈里的一页和它的转场状态（可视条目；逻辑栈在 Navigation 3 的 backStack 上） */
 @Stable
-internal class MochiNavEntry(val id: Int, val route: String, val source: String?, opened: Boolean) {
+internal class MochiNavEntry(
+    val key: NavKey,
+    /** Navigation 3 的内容身份（SaveableStateProvider、movableContent 都按它走） */
+    val contentKey: Any,
+    opened: Boolean,
+) {
+    /** 来源元素（卡片）的 key；null = 侧推 */
+    val source: String? = (key as? MochiNavKey)?.mochiSource
+
+    /** 这个 key 最新的 Nav3 条目：场景内容用它渲染页面；关闭中的页保留 pop 前那一条，画着退场 */
+    var navEntry: NavEntry<NavKey>? = null
+
     /** 打开进度：0 = 缩在来源处，1 = 整屏（弹簧，可能略微过冲）。打开和关闭是同一条弹簧，随时掉头 */
     val progress = Animatable(if (opened) 1f else 0f)
 
@@ -403,7 +333,7 @@ internal class MochiNavEntry(val id: Int, val route: String, val source: String?
 
     /**
      * 已提交返回，正在缩回去。
-     * 换方向那一刻把 [progress] / [move] 的速度记下来：MochiNavHost 换方向靠重启 LaunchedEffect，
+     * 换方向那一刻把 [progress] / [move] 的速度记下来：换方向靠重启 LaunchedEffect，
      * 旧协程被取消时 Animatable 会清零速度（endAnimation），新动画读不到当前速度，要用这里记下的接着走
      */
     var closing: Boolean
@@ -496,19 +426,6 @@ internal class OccluderHandle {
     var shown: () -> Boolean = AlwaysShown
     var coords: LayoutCoordinates? = null
     var layer: GraphicsLayer? = null
-}
-
-/**
- * 当前页面的转场是否已经结束（打开动画走完、也没在关闭）。
- *
- * 转场期间页面按整屏大小排好版、只做缩放，布局本身是稳定的；但重的内容（网络请求、大图解码）最好等它变成 true
- * 再开始，期间用 [ui.feice.mochi.basic.MochiSkeleton] 占位——骨架和真内容占一样的位置，加载完成时原地交叉淡化，
- * 转场过程中不会有东西跳动。不在 [MochiNavHost] 里时总是 true。
- */
-@Composable
-public fun rememberMochiNavSettled(): State<Boolean> {
-    val e = LocalMochiNavEntry.current
-    return remember(e) { derivedStateOf { e == null || (!e.inTransition && !e.closing) } }
 }
 
 /** 有来源的页拖动返回拖到底时，下面那页「露出来」的比例 */

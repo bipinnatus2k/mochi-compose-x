@@ -22,7 +22,9 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.key
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
@@ -30,6 +32,9 @@ import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
+import androidx.navigation3.runtime.NavBackStack
+import androidx.navigation3.runtime.NavKey
+import androidx.navigation3.runtime.entryProvider
 import androidx.test.ext.junit.rules.ActivityScenarioRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -48,9 +53,9 @@ import ui.feice.mochi.anim.MochiMotions
 import ui.feice.mochi.demo.catalog.CatalogGroup
 import ui.feice.mochi.demo.catalog.catalog
 import ui.feice.mochi.demo.pages.SharedBarStepPage
+import ui.feice.mochi.navigation.LocalMochiNavBackStack
 import ui.feice.mochi.navigation.MochiNavHost
-import ui.feice.mochi.navigation.MochiNavigator
-import ui.feice.mochi.navigation.rememberMochiNavigator
+import ui.feice.mochi.navigation.rememberMochiNavSettled
 import ui.feice.mochi.nothing.MochiNothingTheme
 import ui.feice.mochi.nothing.nothingDotTextStyle
 import ui.feice.mochi.theme.MochiTheme
@@ -62,7 +67,10 @@ class NothingAppearanceRegression {
     val rule = ActivityScenarioRule(MainActivity::class.java)
     private val inst = InstrumentationRegistry.getInstrumentation()
     private val layouts = ConcurrentHashMap<String, TextLayoutResult>()
-    private var activeNavigator: MochiNavigator? = null
+    private var activeStack: NavBackStack<NavKey>? = null
+
+    /** Stack-top page's transition state, captured by [TrackSettled]; tap() waits for it to settle. */
+    private var activeSettled: State<Boolean>? = null
     private var sceneId = 0
 
     @Test
@@ -114,7 +122,7 @@ class NothingAppearanceRegression {
                             "bar/0" -> {
                                 tap("推入「邮件」")
                                 shot("$prefix-shared-single")
-                                rule.scenario.onActivity { assertEquals("bar/1", activeNavigator?.current) }
+                                rule.scenario.onActivity { assertEquals(SharedBarStep(1), activeStack?.last()) }
                                 tap("推入「附件」")
                                 shot("$prefix-shared-text")
                             }
@@ -134,7 +142,8 @@ class NothingAppearanceRegression {
                     this.style = style
                     nothingMode = NothingMode.Light
                 }
-                activeNavigator = null
+                activeStack = null
+                activeSettled = null
                 rule.scenario.onActivity { activity ->
                     activity.setContent {
                         key("catalog-$style") { DemoTheme(appearance) { DemoApp(appearance.controller) } }
@@ -294,21 +303,38 @@ class NothingAppearanceRegression {
         } else if (route == "home") {
             DemoApp(ui.feice.mochi.theme.ThemeController())
         } else {
-            val nav = rememberMochiNavigator(route)
-            SideEffect { activeNavigator = nav }
-            MochiNavHost(nav) { page ->
-                if (page.startsWith("bar/")) {
-                    SharedBarStepPage(page.substringAfter('/').toInt())
-                } else {
-                    catalog.first { it.id == page }.page.invoke(
-                        catalog.first {
-                            it.id ==
-                                page
-                        },
-                    )
-                }
+            val stack = remember {
+                NavBackStack<NavKey>(
+                    if (route.startsWith("bar/")) SharedBarStep(route.substringAfter('/').toInt()) else CatalogPage(route),
+                )
             }
+            SideEffect { activeStack = stack }
+            MochiNavHost(
+                backStack = stack,
+                entryProvider = entryProvider {
+                    entry<CatalogPage> { key ->
+                        TrackSettled(key) {
+                            catalog.first { it.id == key.id }.page.invoke(
+                                catalog.first {
+                                    it.id ==
+                                        key.id
+                                },
+                            )
+                        }
+                    }
+                    entry<SharedBarStep> { key -> TrackSettled(key) { SharedBarStepPage(key.step) } }
+                },
+            )
         }
+    }
+
+    /** Pages composed inside [MochiNavHost] report their transition state here; tap() only trusts the stack-top page's (lower pages recomposing must not overwrite it). */
+    @Composable
+    private fun TrackSettled(key: NavKey, content: @Composable () -> Unit) {
+        val settled = rememberMochiNavSettled()
+        val top = LocalMochiNavBackStack.current?.lastOrNull()
+        SideEffect { if (top == key) activeSettled = settled }
+        content()
     }
 
     private fun find(text: String): AccessibilityNodeInfo? {
@@ -353,7 +379,7 @@ class NothingAppearanceRegression {
         var moving = true
         val settle = SystemClock.uptimeMillis() + 2500
         while (moving && SystemClock.uptimeMillis() < settle) {
-            rule.scenario.onActivity { moving = activeNavigator?.isTransitioning == true }
+            rule.scenario.onActivity { moving = activeSettled?.value == false }
             if (moving) SystemClock.sleep(16)
         }
         assertFalse("Navigation did not settle after $text", moving)

@@ -192,7 +192,7 @@ public object MochiSidebarDefaults {
     @Composable
     public fun swipeToOpen(): Boolean {
         val entry = LocalMochiNavEntry.current
-        val nav = LocalMochiNavigator.current
+        val nav = LocalMochiNavEngine.current
         return entry == null || nav == null || nav.under(entry) == null
     }
 

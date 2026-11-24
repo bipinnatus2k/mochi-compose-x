@@ -62,7 +62,7 @@ MochiButtonGroup {
 - `MochiBarGroup(navId = "app.primary") { MochiBarGroupItem(onClick, navId = "app.primary", contentKey = "edit") { Icon } … }`：几个图标按钮共用一个胶囊（iOS 26 顶栏的按钮组），按下任意一项整个胶囊发光、跟手形变。弹菜单的一项用 `MochiBarGroupDropdownItem(expanded, onExpandedChange, items, onItemClick) { Icon }`，用法同 `MochiIconDropdown`，按下时图标变暗（见[下拉菜单](dropdown.md)）。纯色的组展开时菜单从整个胶囊长出来、带融球颈，和玻璃组一样不从单独那一格长出来
 - `MochiBarIconDropdown(expanded, onExpandedChange, items, onItemClick) { Icon }`：单独一个弹菜单的圆按钮（「⋯」），44dp，和 `MochiBarIconButton` 同尺寸同材质。只有一个按钮时用它，不要用只放一项的 `MochiBarGroup`（组两端有留白，画出来是椭圆）
 - 侧推页面默认必须登记稳定 `navId`，让顶栏留在原位变形；图标传稳定 `contentKey`，按钮组的子项也登记。`MochiBackButton` 自动参与。见 [导航 → 共享顶栏](../guide/navigation.md#共享顶栏)
-- `MochiBackButton()`（navigation 包）：圆形返回，默认执行 MochiNavigator 的 pop
+- `MochiBackButton()`（navigation 包）：圆形返回，默认退所在返回栈
 
 配色是 `MochiButtonDefaults.barColors()`。顶栏左右边距 `MochiButtonDefaults.BarHorizontalPadding`（16dp），按钮外边和下面卡片的外边对齐。
 

@@ -159,12 +159,12 @@ private class NavBarNode(val handle: BarHandle) :
     CompositionLocalConsumerModifierNode,
     LayoutAwareModifierNode,
     DrawModifierNode {
-    private var nav: MochiNavigator? = null
+    private var nav: MochiNavEngine? = null
 
     // 导航器和所在的页对一个节点来说一辈子不变（换页会换节点），挂上时读一次就够
     @SuppressLint("SuspiciousCompositionLocalModifierRead")
     override fun onAttach() {
-        val n = currentValueOf(LocalMochiNavigator) ?: return
+        val n = currentValueOf(LocalMochiNavEngine) ?: return
         nav = n
         handle.entry = currentValueOf(LocalMochiNavEntry)
         handle.shown = currentValueOf(LocalMochiTabPageShown)
@@ -253,10 +253,10 @@ internal class BarPathCache {
 
 /**
  * 在所有页面上面画侧推转场中的顶栏（MochiNavHost 的最上层调用）。见文件开头的说明。
- * 正在动的一串页（[MochiNavigator.slideChain]）从起点页的顶栏开始，按每一页的进度依次变形过去，最后画一次：
+ * 正在动的一串页（[MochiNavEngine.slideChain]）从起点页的顶栏开始，按每一页的进度依次变形过去，最后画一次：
  * 快速连续推入 / 返回时也只有一套顶栏，某一页转场结束、这一串变短时画面不跳
  */
-internal fun DrawScope.drawSharedBarItems(nav: MochiNavigator, paths: BarPathCache, glass: Boolean = false) {
+internal fun DrawScope.drawSharedBarItems(nav: MochiNavEngine, paths: BarPathCache, glass: Boolean = false) {
     val f = sharedBarFrame(nav, size.width, ContentBlur.toPx()) ?: return
     drawMorphShapes(if (glass) f.shapes.filter { it.glass == null } else f.shapes, f.envelope, paths)
     // 先画淡出的，再画淡入 / 接着走的
@@ -270,14 +270,14 @@ private class SharedBarFrame(val shapes: List<MorphShape>, val contents: List<Mo
  * 侧推转场里画成玻璃的共享顶栏形状（[navBarShape] 的 glass），按从左到右的顺序；没在转场时为空。
  * [width] 是导航主机的宽，[blurMax] 内容模糊的上限（px，只影响内容，这里用不到但算法共用）
  */
-internal fun sharedBarGlassShapes(nav: MochiNavigator, width: Float, blurMax: Float): List<SharedGlassShape> =
+internal fun sharedBarGlassShapes(nav: MochiNavEngine, width: Float, blurMax: Float): List<SharedGlassShape> =
     sharedBarFrame(nav, width, blurMax)?.shapes?.filter { it.glass != null }?.sortedBy { it.rect.center.x }
         ?.map { SharedGlassShape(it.rect, it.radius, it.alpha, it.glass!!) }.orEmpty()
 
 /** 转场里一块玻璃形状：此刻的矩形、圆角（px）、透明度，和按钮在页里的玻璃（主机没有整页录制时取样它所在页的背景） */
 internal class SharedGlassShape(val rect: Rect, val radius: Float, val alpha: Float, val fill: GlassFill)
 
-private fun sharedBarFrame(nav: MochiNavigator, width: Float, blurMax: Float): SharedBarFrame? {
+private fun sharedBarFrame(nav: MochiNavEngine, width: Float, blurMax: Float): SharedBarFrame? {
     val chain = nav.slideChain()
     if (chain.size < 2) return null
     val base = chain.first()
@@ -538,7 +538,7 @@ private fun fuseEnvelope(m: Float): Float = smoothstep(0f, 0.12f, m) * (1f - smo
  * [fill] 为 null（主机不录整页）时每块用按钮自己的玻璃，取样它所在页的背景：转场里玻璃按钮还是玻璃，不变成纯色
  */
 @Composable
-internal fun SharedBarGlass(nav: MochiNavigator, fill: GlassFill?) {
+internal fun SharedBarGlass(nav: MochiNavEngine, fill: GlassFill?) {
     val blurMax = with(LocalDensity.current) { ContentBlur.toPx() }
     var width by remember { mutableFloatStateOf(0f) }
     fun shape(i: Int) = sharedBarGlassShapes(nav, width, blurMax).getOrNull(i)

@@ -71,6 +71,8 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
+import androidx.navigation3.runtime.NavBackStack
+import androidx.navigation3.runtime.NavKey
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -90,10 +92,11 @@ import ui.feice.mochi.effect.glass.glassFor
 import ui.feice.mochi.effect.glass.rememberGlassFill
 import ui.feice.mochi.effect.glass.resolved
 import ui.feice.mochi.effect.mask.mochiScrollEdgeBlur
+import ui.feice.mochi.navigation.LocalMochiNavEngineSlot
 import ui.feice.mochi.navigation.LocalMochiNavSurface
 import ui.feice.mochi.navigation.LocalMochiPredictiveBack
+import ui.feice.mochi.navigation.MochiNavEngineSlot
 import ui.feice.mochi.navigation.MochiNavSurface
-import ui.feice.mochi.navigation.MochiNavigator
 import ui.feice.mochi.navigation.MochiScreenCorners
 import ui.feice.mochi.navigation.MochiScrollEdgeDefaults
 import ui.feice.mochi.navigation.mochiScrollEdgeFade
@@ -161,7 +164,7 @@ public fun Modifier.mochiSheetBackdrop(state: MochiSheetState): Modifier = this
  * 内容放在 [MochiSheetContent] 里：放不下时能竖着滚，滚到顶再往下拖、往上推还没到最高一档时拖的是面板（和 iOS 一样）。
  * 不要再自己套一层竖着滚动的容器。
  * [modifier] 作用在面板本身上（面板挂在窗口的浮层里，没有别的根布局）。
- * @param navigator 面板内 [ui.feice.mochi.navigation.MochiNavHost] 的同一个导航器；有子页时优先退页，退回根页后才关闭面板
+ * @param backStack 面板内 [ui.feice.mochi.navigation.MochiNavHost] 的同一个返回栈；有子页时优先退页，退回根页后才关闭面板
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Suppress("ktlint:compose:modifier-not-used-at-root")
@@ -173,7 +176,7 @@ public fun MochiSheet(
     color: Color = MochiDefaults.sheetBackground(),
     grabber: Boolean = true,
     hideNavigationBar: Boolean = true,
-    navigator: MochiNavigator? = null,
+    backStack: NavBackStack<NavKey>? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val currentOnDismiss by rememberUpdatedState(onDismiss)
@@ -312,12 +315,15 @@ public fun MochiSheet(
             }
         }
         // 子页由内层 NavHost 处理预测性返回；最后一页退出动画中也不能让连续返回误关外层面板。
+        // 内层主机把引擎放进这里登记的槽位（对上同一个 backStack），返回优先级按它此刻的转场状态走
+        val engineSlot = backStack?.let { remember(it) { MochiNavEngineSlot(it) } }
+        val innerEngine = engineSlot?.engine
         val predictiveBack = LocalMochiPredictiveBack.current
-        BackHandler(enabled = !predictiveBack && state.requested && navigator?.canPop != true) {
-            if (navigator?.isTransitioning != true) state.hide()
+        BackHandler(enabled = !predictiveBack && state.requested && innerEngine?.canPop != true) {
+            if (innerEngine?.isTransitioning != true) state.hide()
         }
-        PredictiveBackHandler(enabled = predictiveBack && state.requested && navigator?.canPop != true) { events ->
-            if (navigator?.isTransitioning == true) {
+        PredictiveBackHandler(enabled = predictiveBack && state.requested && innerEngine?.canPop != true) { events ->
+            if (innerEngine?.isTransitioning == true) {
                 events.collect { }
                 return@PredictiveBackHandler
             }
@@ -555,6 +561,7 @@ public fun MochiSheet(
                             CompositionLocalProvider(
                                 LocalMochiSheetCorner provides corner,
                                 LocalMochiNavSurface provides navSurface,
+                                LocalMochiNavEngineSlot provides engineSlot,
                                 LocalMochiElevated provides true,
                                 LocalMochiSheetGlass provides (glass != null),
                             ) { this@Column.content() }

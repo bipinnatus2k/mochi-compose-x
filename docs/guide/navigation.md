@@ -1,28 +1,31 @@
 # Navigation and page transitions
 
-`ui.feice.mochi.navigation` provides page stacks, source-container morphs, pushes, shared toolbars and back gestures. Start with [app integration](application-integration.md); the complete three-page code is [MochiAppStarter.kt](../../example/src/main/java/ui/feice/mochi/starter/MochiAppStarter.kt).
+`ui.feice.mochi.navigation` builds on **Navigation 3** (`androidx.navigation3`): the app owns a typed back stack (`NavBackStack<NavKey>`), and Mochi renders it with source-container morphs, pushes, shared toolbars and back gestures on top. Start with [app integration](application-integration.md); the complete three-page code is [MochiAppStarter.kt](../../example/src/main/java/ui/feice/mochi/starter/MochiAppStarter.kt).
 
 ## Choose the transition first
 
 | Scenario | Integration | Toolbar |
 |---|---|---|
-| One-shot transition from a card or icon | `mochiNavSource` + `push(route, from = key)` | The whole page, including the bar, morphs from and back into the source |
-| List-to-detail, settings child page | `push(route)` without a source | The page slides; registered shared toolbar controls stay in place and morph |
-| Multi-page sheet | Separate navigator passed to both sheet and internal host | Shared internal push toolbar; pop children before dismissing the sheet |
+| One-shot transition from a card or icon | `mochiNavSource` + key carrying `mochiSource` | The whole page, including the bar, morphs from and back into the source |
+| List-to-detail, settings child page | `stack.add(key)` without a source | The page slides; registered shared toolbar controls stay in place and morph |
+| Multi-page sheet | The same stack passed to both sheet and internal host | Shared internal push toolbar; pop children before dismissing the sheet |
 
 **Do not use `mochiSharedElement` for toolbar sharing or icon flight. It is a deprecated no-op.** Source opening now morphs the container and cross-fades card/page content, with no independent element flight. Shared toolbars are a separate, active capability.
 
 | API | Description |
 |---|---|
-| `rememberMochiNavigator(root)` | String routes saved through rememberSaveable for recreation |
-| `MochiNavHost(navigator)` | Page display, transitions, system back and full-screen swipe back |
-| `push(route, from = key)` / `push(route)` | Source-container morph / push |
-| `pop()` / `popTo(index)` | Back one page / return to an earlier page (root index 0). Interrupted side pushes continue exiting from their current positions. |
-| `MochiNavigator.current` | Enclosing host's navigator |
+| `rememberNavBackStack(Home)` | Navigation 3's saved back stack; keys are `@Serializable` data classes/objects (or `remember { NavBackStack(Home) }` without persistence) |
+| `MochiNavHost(backStack, entryProvider)` | Page display, transitions, system back and full-screen swipe back; destinations come from Navigation 3's `entryProvider { entry<Home> { … } }` DSL |
+| `stack.add(key)` / `stack.removeLast()` | Push / back. A key whose `mochiSource` matches a registered `mochiNavSource` opens as a container morph; others push |
+| `stack.mochiPopTo(index)` | Return to an earlier page (root index 0). Interrupted side pushes continue exiting from their current positions. |
+| `LocalMochiNavBackStack` | Enclosing host's back stack, for deep pages and overlays |
+| `MochiNavKey` | Opt-in marker interface for keys that want a source morph (`mochiSource`); plain `NavKey` pages always push |
 | `mochiNavSource(key, cornerRadius, color)` | Source registration matching the real card's key, radius and color |
 | `mochiNavOccluder()` | Registers a bar floating over content as an occluder: during a source morph the bar stays above the container and fades with progress (a glass bar shows the morphing container through it, not the covered content); built into `MochiTitleBar`, `mochiScrollEdgeFade`, `MochiTabBar`, `MochiBottomToolbar` |
 | `rememberMochiScreenCorners()` | Four physical corner radii in px, not dp |
 | `MochiNavHost(corners = …)` | Corner override; inherit sheet corners inside a sheet and screen corners elsewhere by default; `MochiScreenCorners.None` explicitly disables inner transition rounding |
+
+Navigation 3 semantics apply to the stack: **equal keys are the same destination.** Pushing a key that is already on the stack does not open a second page — give the key a unique parameter to open it twice. The source (`mochiSource`) is data on the key, so it survives process recreation with the rest of the stack.
 
 ## One-shot transition
 
@@ -31,46 +34,61 @@ Place this complete function inside the app's existing `MochiTheme` and `Provide
 ```kotlin
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.navigation3.runtime.NavKey
+import androidx.navigation3.runtime.entryProvider
+import androidx.navigation3.runtime.rememberNavBackStack
+import kotlinx.serialization.Serializable
 import ui.feice.mochi.list.MochiListCard
 import ui.feice.mochi.list.MochiListDefaults
 import ui.feice.mochi.list.MochiListRow
 import ui.feice.mochi.navigation.MochiBackButton
 import ui.feice.mochi.navigation.MochiLargeTitleScaffold
 import ui.feice.mochi.navigation.MochiNavHost
+import ui.feice.mochi.navigation.MochiNavKey
 import ui.feice.mochi.navigation.mochiNavSource
-import ui.feice.mochi.navigation.rememberMochiNavigator
 import ui.feice.mochi.theme.MochiDefaults
+
+@Serializable
+data object Home : NavKey
+
+@Serializable
+data class Detail(override val mochiSource: String? = null) : MochiNavKey
 
 @Composable
 fun NavigationBasics() {
-    val nav = rememberMochiNavigator("home")
-    MochiNavHost(nav) { route ->
-        when (route) {
-            "home" -> MochiLargeTitleScaffold(title = "Home") {
-                MochiListCard(
-                    modifier = Modifier.mochiNavSource("entry", MochiListDefaults.SectionCorner, MochiDefaults.groupedContainer()),
-                ) {
-                    MochiListRow("Open detail", chevron = true, onClick = { nav.push("detail", from = "entry") })
+    val stack = rememberNavBackStack(Home)
+    MochiNavHost(
+        backStack = stack,
+        entryProvider = entryProvider {
+            entry<Home> {
+                MochiLargeTitleScaffold(title = "Home") {
+                    MochiListCard(
+                        modifier = Modifier.mochiNavSource("entry", MochiListDefaults.SectionCorner, MochiDefaults.groupedContainer()),
+                    ) {
+                        MochiListRow("Open detail", chevron = true, onClick = { stack.add(Detail(mochiSource = "entry")) })
+                    }
                 }
             }
-            "detail" -> MochiLargeTitleScaffold(title = "Detail", navigationIcon = { MochiBackButton() }) {
-                MochiListCard { MochiListRow("Opened from the source card") }
+            entry<Detail> {
+                MochiLargeTitleScaffold(title = "Detail", navigationIcon = { MochiBackButton() }) {
+                    MochiListCard { MochiListRow("Opened from the source card") }
+                }
             }
-        }
-    }
+        },
+    )
 }
 
 ```
 
-Register the outer card so the whole card is recorded. Source/target contents retain their measured layout; transforms and corners animate in layers without reflowing the whole page each frame. Opening and closing default to iOS smooth 300ms for size and corners (`MochiSprings.smooth(300)`: no bounce, settles smoothly), while position uses its own slightly bouncy snappy 300ms (`openMove` / `closeMove`) that overshoots a little before settling; keeping velocity when reversed mid-way. You can swipe back while the page is still opening without waiting for it to settle, and tapping a page that is shrinking back reopens it from where it is. Customize through `MochiNavDefaults.spec()` rather than copying the engine.
+Keys must implement `NavKey` and be `@Serializable` for the saved stack; apps apply the `org.jetbrains.kotlin.plugin.serialization` plugin. Back pops with `stack.removeLast()` (or any back handler the app wires to it). Source/target contents retain their measured layout; transforms and corners animate in layers without reflowing the whole page each frame. Opening and closing default to iOS smooth 300ms for size and corners (`MochiSprings.smooth(300)`: no bounce, settles smoothly), while position uses its own slightly bouncy snappy 300ms (`openMove` / `closeMove`) that overshoots a little before settling; keeping velocity when reversed mid-way. You can swipe back while the page is still opening without waiting for it to settle, and tapping a page that is shrinking back reopens it from where it is. Customize through `MochiNavDefaults.spec()` rather than copying the engine.
 
 The source picture fades out early while the page overlaps it with a fade-in; closing restores the source. The underlying page keeps composition and scroll state, stays at its original scale and only dims during transition, and is not drawn when fully covered. Source morphs use `backdrop` around the receding page (black by default); pushes use `pushBackdrop` (grouped page color by default).
 
 ## Push and back
 
-`nav.push("detail")` without `from` pushes a page from the right and shifts the lower page left. Register toolbars as below: using Mochi-looking buttons alone does not enable sharing. `MochiNavSpec.push` is critically damped by default; interruption/reversal continues from current progress and velocity instead of resetting.
+`stack.add(key)` without a source pushes a page from the right and shifts the lower page left. Register toolbars as below: using Mochi-looking buttons alone does not enable sharing. `MochiNavSpec.push` is critically damped by default; interruption/reversal continues from current progress and velocity instead of resetting.
 
-`MochiBackButton` defaults to the current navigator's `pop()`. Outside a `MochiNavHost`, or on its first page, it forwards to the Activity's `OnBackPressedDispatcher`, so outer handlers close a sheet or finish the Activity instead of the button doing nothing. The host handles system back and gestures; do not install a competing page handler. Independent overlays close according to their own back lifecycle first. `popTo(index)` returns farther back; `MochiBackButton(history = { route -> title })` enables long-press history with a business-provided title mapping.
+`MochiBackButton` defaults to popping the enclosing stack. Outside a `MochiNavHost`, or on its first page, it forwards to the Activity's `OnBackPressedDispatcher`, so outer handlers close a sheet or finish the Activity instead of the button doing nothing. The host handles system back and gestures; do not install a competing page handler. Independent overlays close according to their own back lifecycle first. `stack.mochiPopTo(index)` returns farther back; `MochiBackButton(history = { key -> title })` enables long-press history with a business-provided title mapping.
 
 Set `android:enableOnBackInvokedCallback="true"` on the application for predictive back. Android 14 may also require its developer option; three-button navigation or missing gesture progress still commits a normal exit animation.
 
@@ -123,7 +141,7 @@ Source openings carry the whole page and do not separately pin its toolbar. Menu
 
 Sheet page outlines, dimming and shadows follow the visible sheet bottom, including the full-height navigation area; content retains its stable safe measurement separately. Floating bottom corners follow the visible edge and full-height bottom corners remain square. Do not add bottom safe padding outside the internal host.
 
-Pass a separate navigator to `MochiSheet(navigator = nav)` and its internal `MochiNavHost(nav)` (omit corners to inherit the sheet transition outline; full-height side pushes retain square bottom corners). Match `pushBackdrop` to the sheet surface, use `MochiSheetHeader` and stable toolbar IDs. Pop child pages before dismissing the root; back during a child's exit must not escape to the page underneath. See [Sheet](../components/sheet.md).
+Pass the same stack to `MochiSheet(backStack = nav)` and its internal `MochiNavHost(nav)` (omit corners to inherit the sheet transition outline; full-height side pushes retain square bottom corners). Match `pushBackdrop` to the sheet surface, use `MochiSheetHeader` and stable toolbar IDs. Pop child pages before dismissing the root; back during a child's exit must not escape to the page underneath. See [Sheet](../components/sheet.md).
 
 Keep tabs in their owning page and use `mochiHideWhenCovered()` when a new page covers them; they restore with host progress. Select explicit collapse/expand or scroll coordination as the product requires, reading the actual `collapsed` state. See [Tab bar](../components/tabbar.md).
 
